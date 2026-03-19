@@ -54,7 +54,7 @@ export default function ProfileClient({
   seasonSummary,
   detailedClassStats,
   weaponAccuracy,
-  seasonComparison,
+  seasonComparison: seasonComparisonData,
   globalRanking,
   streaks,
 }: ProfileClientProps) {
@@ -69,13 +69,14 @@ export default function ProfileClient({
   }, [user]);
 
   return (
-    <main className="min-h-screen bg-wf-bg text-wf-text">
+    <main className="min-h-screen bg-wf-bg text-wf-text" suppressHydrationWarning>
       <HeroSection player={data} showCardGenerator={true} backgroundPreset={userSettings?.backgroundPreset} />
       <ProfileNav nickname={nickname} activeTab={tab} />
 
       {/* Banner - Баннер профиля (шапка) */}
       <div
         className="relative overflow-hidden border-b border-wf-border"
+        suppressHydrationWarning
         style={{
           backgroundImage: userSettings?.bannerUrl && userSettings.bannerUrl !== ""
             ? `url(${userSettings.bannerUrl})`
@@ -164,7 +165,7 @@ export default function ProfileClient({
             <div className="bg-wf-card border border-wf-border rounded-lg p-4">
               <h3 className="text-sm font-semibold text-wf-muted_text mb-4">Прогресс по сезонам</h3>
             </div>
-            <SeasonComparison comparison={seasonComparison!} />
+            <SeasonComparison comparison={seasonComparisonData!} />
             <StreakTracker streaks={streaks!} />
           </div>
         )}
