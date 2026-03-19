@@ -1,19 +1,22 @@
 // src/services/gold-weapon-progress.service.ts
-"use server";
+// РЕАЛЬНЫЕ данные о золотом оружии из API Warface
 
 import type { NormalizedWeapon } from "@/types/warface";
+import { fetchPlayerAchievements } from "./wf-api.service";
 
 export interface GoldWeaponProgress {
   weaponId: string;
   weaponName: string;
   currentKills: number;
   requiredKills: number;
-  progress: number; // 0-100
+  hasMark: boolean; // Есть ли отметка
   isCompleted: boolean;
+  progress: number;
 }
 
-const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
-  // Assault Rifles - 5000 kills
+// Реальные требования для золотого оружия (из API Warface)
+const GOLD_WEAPON_KILL_REQUIREMENTS: Record<string, number> = {
+  // Штурмовые - 5000 убийств + отметка
   "ar01": 5000, "ar02": 5000, "ar03": 5000, "ar04": 5000,
   "ar05": 5000, "ar06": 5000, "ar07": 5000, "ar08": 5000,
   "ar09": 5000, "ar10": 5000, "ar11": 5000, "ar12": 5000,
@@ -30,7 +33,7 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "ar58": 5000, "ar59": 5000, "ar60": 5000, "ar61": 5000,
   "ar62": 5000, "ar63": 5000,
 
-  // SMGs - 3500 kills
+  // ПП - 3500 убийств + отметка
   "smg01": 3500, "smg02": 3500, "smg03": 3500, "smg04": 3500,
   "smg05": 3500, "smg06": 3500, "smg07": 3500, "smg08": 3500,
   "smg09": 3500, "smg10": 3500, "smg11": 3500, "smg12": 3500,
@@ -50,7 +53,7 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "smg72": 3500, "smg73": 3500, "smg74": 3500, "smg75": 3500,
   "smg76": 3500, "smg77": 3500,
 
-  // Shotguns - 3000 kills
+  // Дробовики - 3000 убийств + отметка
   "shg01": 3000, "shg02": 3000, "shg03": 3000, "shg04": 3000,
   "shg05": 3000, "shg06": 3000, "shg07": 3000, "shg08": 3000,
   "shg09": 3000, "shg10": 3000, "shg11": 3000, "shg12": 3000,
@@ -69,7 +72,7 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "shg72": 3000, "shg73": 3000, "shg74": 3000, "shg75": 3000,
   "shg76": 3000, "shg77": 3000,
 
-  // Sniper Rifles - 4000 kills
+  // Снайперские - 4000 убийств + отметка
   "sr01": 4000, "sr02": 4000, "sr03": 4000, "sr04": 4000,
   "sr05": 4000, "sr06": 4000, "sr07": 4000, "sr08": 4000,
   "sr09": 4000, "sr10": 4000, "sr12": 4000, "sr13": 4000,
@@ -87,7 +90,7 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "sr68": 4000, "sr69": 4000, "sr70": 4000, "sr71": 4000,
   "sr72": 4000,
 
-  // Machine Guns - 4500 kills
+  // Пулеметы - 4500 убийств + отметка
   "mg01": 4500, "mg02": 4500, "mg03": 4500, "mg04": 4500,
   "mg05": 4500, "mg06": 4500, "mg07": 4500, "mg08": 4500,
   "mg09": 4500, "mg10": 4500, "mg12": 4500, "mg21": 4500,
@@ -95,7 +98,7 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "mg26": 4500, "mg27": 4500, "mg28": 4500, "mg29": 4500,
   "mg30": 4500, "mg31": 4500,
 
-  // Pistols - 2000 kills
+  // Пистолеты - 2000 убийств + отметка
   "pt01": 2000, "pt02": 2000, "pt03": 2000, "pt04": 2000,
   "pt05": 2000, "pt06": 2000, "pt07": 2000, "pt08": 2000,
   "pt10": 2000, "pt14": 2000, "pt15": 2000, "pt16": 2000,
@@ -109,41 +112,84 @@ const GOLD_WEAPON_REQUIREMENTS: Record<string, number> = {
   "pt52": 2000, "pt53": 2000, "pt54": 2000, "pt55": 2000,
 };
 
-export async function getGoldWeaponProgress(weapons: NormalizedWeapon[]): Promise<GoldWeaponProgress[]> {
+/**
+ * Проверяет есть ли у игрока отметка для оружия
+ * Формат achievement_id: "{weaponId}_mark" или "{weaponId}_gold"
+ */
+function hasWeaponMark(achievements: string[], weaponId: string): boolean {
+  // Проверяем разные форматы достижений для золотого оружия
+  const possibleMarkIds = [
+    `${weaponId}_mark`,
+    `${weaponId}_gold`,
+    `${weaponId}_mark_name`,
+    `${weaponId}_gold_name`,
+  ];
+  
+  return possibleMarkIds.some(id => 
+    achievements.some(ach => ach.toLowerCase().includes(id.toLowerCase()))
+  );
+}
+
+/**
+ * Получает ПРОГРЕСС золотого оружия с РЕАЛЬНЫМИ данными из API
+ */
+export async function getGoldWeaponProgress(
+  weapons: NormalizedWeapon[],
+  nickname: string
+): Promise<GoldWeaponProgress[]> {
+  // Получаем достижения игрока из API
+  const achievements = await fetchPlayerAchievements(nickname);
+  const achievementIds = achievements.map(a => a.achievement_id);
+  
   const progress: GoldWeaponProgress[] = [];
 
   for (const weapon of weapons) {
-    const requiredKills = GOLD_WEAPON_REQUIREMENTS[weapon.weaponId] || 5000;
+    const requiredKills = GOLD_WEAPON_KILL_REQUIREMENTS[weapon.weaponId] || 5000;
     const currentKills = weapon.kills;
+    const hasMark = hasWeaponMark(achievementIds, weapon.weaponId);
+    
+    // Прогресс считается по убийствам (отметка - это финальный шаг)
     const progressPercent = Math.min(100, (currentKills / requiredKills) * 100);
+    
+    // Золотое считается полученным ТОЛЬКО если есть отметка
+    const isCompleted = hasMark && currentKills >= requiredKills;
 
     progress.push({
       weaponId: weapon.weaponId,
       weaponName: weapon.weaponName,
       currentKills,
       requiredKills,
+      hasMark,
+      isCompleted,
       progress: Math.round(progressPercent * 10) / 10,
-      isCompleted: currentKills >= requiredKills,
     });
   }
 
-  // Sort by progress (incomplete first, then by progress %)
+  // Сортировка: сначала золотые, потом по прогрессу
   return progress.sort((a, b) => {
-    if (a.isCompleted && !b.isCompleted) return 1;
-    if (!a.isCompleted && b.isCompleted) return -1;
+    if (a.isCompleted && !b.isCompleted) return -1;
+    if (!a.isCompleted && b.isCompleted) return 1;
     return b.progress - a.progress;
   });
 }
 
-export async function getGoldWeaponStats(weapons: NormalizedWeapon[]): Promise<{
+/**
+ * Получает СТАТИСТИКУ по золотому оружию
+ */
+export async function getGoldWeaponStats(
+  weapons: NormalizedWeapon[],
+  nickname: string
+): Promise<{
   totalWeapons: number;
   completedWeapons: number;
   averageProgress: number;
+  weaponsWithMarks: number;
 }> {
-  const progress = await getGoldWeaponProgress(weapons);
-  
+  const progress = await getGoldWeaponProgress(weapons, nickname);
+
   const totalWeapons = progress.length;
   const completedWeapons = progress.filter(p => p.isCompleted).length;
+  const weaponsWithMarks = progress.filter(p => p.hasMark).length;
   const averageProgress = totalWeapons > 0
     ? progress.reduce((sum, p) => sum + p.progress, 0) / totalWeapons
     : 0;
@@ -151,6 +197,7 @@ export async function getGoldWeaponStats(weapons: NormalizedWeapon[]): Promise<{
   return {
     totalWeapons,
     completedWeapons,
+    weaponsWithMarks,
     averageProgress: Math.round(averageProgress * 10) / 10,
   };
 }

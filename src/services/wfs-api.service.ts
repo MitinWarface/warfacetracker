@@ -94,12 +94,15 @@ export async function fetchWFSOnlineStats(): Promise<WFSOnlineStats | null> {
   try {
     const res = await fetchViaProxy("/online/stats");
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // WFS API недоступен - это нормально, просто возвращаем null
+      return null;
+    }
 
     const data = await res.json();
     return data as WFSOnlineStats;
   } catch (error) {
-    console.error("[WFS API] Error fetching online stats:", error);
+    // Тихо возвращаем null - онлайн просто не показывается
     return null;
   }
 }

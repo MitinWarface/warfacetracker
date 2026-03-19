@@ -31,12 +31,14 @@ export default function Navbar() {
 
   async function loadOnlineStats() {
     try {
+      // Пытаемся получить онлайн (может не работать если WFS API недоступен)
       const stats = await fetchWFSOnlineStats();
       if (stats) {
         setOnlineStats({ totalOnline: stats.totalOnline });
       }
     } catch (error) {
-      console.error("Load online stats error:", error);
+      // Тихо игнорируем ошибку - онлайн просто не показывается
+      // console.error("Load online stats error:", error);
     }
   }
 
@@ -62,9 +64,9 @@ export default function Navbar() {
             WF <span className="text-wf-accent">Tracker</span>
           </Link>
 
-          {/* Online Stats */}
+          {/* Online Stats - ОПЦИОНАЛЬНО (может не работать) */}
           <div className="hidden md:flex items-center gap-4">
-            {onlineStats && (
+            {onlineStats && onlineStats.totalOnline > 0 && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-wf-card border border-wf-border rounded-lg">
                 <Activity className="w-4 h-4 text-green-400" />
                 <span className="text-xs text-wf-muted_text">Онлайн:</span>

@@ -10,8 +10,9 @@ interface GoldWeaponProgressData {
   weaponName: string;
   currentKills: number;
   requiredKills: number;
-  progress: number;
+  hasMark: boolean; // ЕСТЬ ЛИ ОТМЕТКА
   isCompleted: boolean;
+  progress: number;
 }
 
 interface GoldWeaponProgressProps {
@@ -20,6 +21,7 @@ interface GoldWeaponProgressProps {
     totalWeapons: number;
     completedWeapons: number;
     averageProgress: number;
+    weaponsWithMarks?: number; // НОВОЕ!
   };
 }
 
@@ -35,7 +37,7 @@ export default function GoldWeaponProgress({ progress, summary }: GoldWeaponProg
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-wf-card border border-wf-border rounded-lg p-4 text-center">
           <p className="text-xs text-wf-muted_text uppercase">Всего оружий</p>
           <p className="text-2xl font-bold text-wf-text">{summary.totalWeapons}</p>
@@ -43,6 +45,10 @@ export default function GoldWeaponProgress({ progress, summary }: GoldWeaponProg
         <div className="bg-wf-card border border-wf-border rounded-lg p-4 text-center">
           <p className="text-xs text-wf-muted_text uppercase">Золотых</p>
           <p className="text-2xl font-bold text-yellow-400">{summary.completedWeapons}</p>
+        </div>
+        <div className="bg-wf-card border border-wf-border rounded-lg p-4 text-center">
+          <p className="text-xs text-wf-muted_text uppercase">С отметками</p>
+          <p className="text-2xl font-bold text-blue-400">{summary.weaponsWithMarks || 0}</p>
         </div>
         <div className="bg-wf-card border border-wf-border rounded-lg p-4 text-center">
           <p className="text-xs text-wf-muted_text uppercase">Ср. прогресс</p>
@@ -98,18 +104,22 @@ export default function GoldWeaponProgress({ progress, summary }: GoldWeaponProg
               "bg-wf-card border rounded-lg p-4",
               weapon.isCompleted
                 ? "border-yellow-500/30 bg-yellow-500/10"
-                : "border-wf-border"
+                : weapon.hasMark
+                  ? "border-blue-500/30 bg-blue-500/10"
+                  : "border-wf-border"
             )}
           >
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-wf-text truncate">{weapon.weaponName}</h4>
               {weapon.isCompleted ? (
                 <Trophy className="w-4 h-4 text-yellow-400" />
+              ) : weapon.hasMark ? (
+                <Check className="w-4 h-4 text-blue-400" />
               ) : (
                 <Lock className="w-3 h-3 text-wf-muted_text" />
               )}
             </div>
-            
+
             <div className="mb-2">
               <div className="flex justify-between text-xs text-wf-muted_text mb-1">
                 <span>{weapon.currentKills.toLocaleString()} / {weapon.requiredKills.toLocaleString()}</span>
@@ -119,7 +129,7 @@ export default function GoldWeaponProgress({ progress, summary }: GoldWeaponProg
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    weapon.isCompleted ? "bg-yellow-400" : "bg-wf-accent"
+                    weapon.isCompleted ? "bg-yellow-400" : weapon.hasMark ? "bg-blue-400" : "bg-wf-accent"
                   )}
                   style={{ width: `${weapon.progress}%` }}
                 />
@@ -127,9 +137,22 @@ export default function GoldWeaponProgress({ progress, summary }: GoldWeaponProg
             </div>
 
             {!weapon.isCompleted && (
-              <p className="text-xs text-wf-muted_text">
-                Осталось: {(weapon.requiredKills - weapon.currentKills).toLocaleString()} убийств
-              </p>
+              <div className="space-y-1">
+                {weapon.hasMark ? (
+                  <p className="text-xs text-blue-400">
+                    ✓ Отметка получена
+                  </p>
+                ) : (
+                  <p className="text-xs text-wf-muted_text">
+                    Требуется отметка
+                  </p>
+                )}
+                {!weapon.hasMark && (
+                  <p className="text-xs text-wf-muted_text">
+                    Осталось: {(weapon.requiredKills - weapon.currentKills).toLocaleString()} убийств
+                  </p>
+                )}
+              </div>
             )}
           </div>
         ))}

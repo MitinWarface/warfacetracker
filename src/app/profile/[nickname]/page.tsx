@@ -149,13 +149,13 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     ? await fetchWFSPvEAchievements(nickname)
     : null;
 
-  // Gold weapon progress for gold tab
+  // Gold weapon progress for gold tab - ТЕПЕРЬ С РЕАЛЬНЫМИ ДАННЫМИ
   const goldProgress = tab === "gold"
-    ? await getGoldWeaponProgress(data.weapons)
+    ? await getGoldWeaponProgress(data.weapons, nickname)
     : [];
   const goldStats = tab === "gold"
-    ? await getGoldWeaponStats(data.weapons)
-    : { totalWeapons: 0, completedWeapons: 0, averageProgress: 0 };
+    ? await getGoldWeaponStats(data.weapons, nickname)
+    : { totalWeapons: 0, completedWeapons: 0, averageProgress: 0, weaponsWithMarks: 0 };
 
   // Seasonal rewards
   const seasonalRewards = tab === "rewards"
