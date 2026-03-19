@@ -18,11 +18,11 @@ export type SyncResult =
 export const syncPlayer = cache(async function syncPlayer(nickname: string): Promise<SyncResult> {
   const key = `player:${nickname.toLowerCase()}`;
 
-  // 1. Redis - skip cache for fresh data
-  // const cached = await getCache<NormalizedPlayerStats>(key);
-  // if (cached) return { ok: true, data: cached, source: "cache" };
+  // 1. Redis cache - check first for better performance
+  const cached = await getCache<NormalizedPlayerStats>(key);
+  if (cached) return { ok: true, data: cached, source: "cache" };
 
-  // 2. Always fetch from API for fresh data
+  // 2. Fetch from API for fresh data
   const raw = await fetchPlayerStat(nickname);
   if (!raw) return { ok: false, error: "Player not found or API unavailable" };
 
@@ -32,6 +32,7 @@ export const syncPlayer = cache(async function syncPlayer(nickname: string): Pro
   try { await upsertPlayer(normalized); }
   catch (e: unknown) { console.error("[upsertPlayer]", (e as Error)?.message ?? e); }
 
+  // 3. Cache the result
   await setCache(key, normalized, CACHE_TTL);
   return { ok: true, data: normalized, source: "api" };
 });

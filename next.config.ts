@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "ru.warface.com",
       },
+      {
+        protocol: "https",
+        hostname: "api.warface.ru",
+      },
     ],
     unoptimized: process.env.NODE_ENV === "development",
   },

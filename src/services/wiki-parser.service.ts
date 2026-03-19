@@ -6,6 +6,7 @@ import type { WFWeaponCatalog, WFAchievementCatalog } from "@/types/warface";
 
 const WIKI_BASE = "https://ru.warface.com/wiki/index.php/";
 const API_BASE = "http://api.warface.ru";
+const CDN_BASE = "https://cdn.wfts.su/wf_achievements";
 
 /**
  * Получает данные об оружии из Wiki Warface
@@ -24,50 +25,60 @@ export async function fetchWeaponInfoFromWiki(weaponId: string): Promise<{
     // Пытаемся получить название из локального файла или API
     const catalog = await fetchWeaponCatalog();
     const weaponFromCatalog = catalog.find(w => w.id === weaponId);
-    
+
     if (weaponFromCatalog) {
       return {
         name: weaponFromCatalog.name,
-        imageUrl: `https://wf.cdn.gmru.net/wiki/images/${encodeURIComponent(weaponFromCatalog.name)}.png`,
+        imageUrl: getProxyImageUrl(`https://wf.cdn.gmru.net/wiki/images/${encodeURIComponent(weaponFromCatalog.name)}.png`),
       };
     }
 
-    // Если не нашли в каталоге, пробуем спарсить из Wiki
-    const response = await fetch(`${WIKI_BASE}${encodeURIComponent(weaponId)}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-      },
-      next: { revalidate: 3600 }, // Кэш на 1 час
-    });
-
-    if (!response.ok) return null;
-
-    const html = await response.text();
+    // Если не нашли в каталоге, пробуем спарсить из Wiki через прокси
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}${encodeURIComponent(weaponId)}`)}`;
     
-    // Парсим название из заголовка
-    const titleMatch = html.match(/<h1[^>]*class="firstHeading"[^>]*>([^<]+)<\/h1>/);
-    const name = titleMatch ? titleMatch[1].trim() : weaponId;
+    try {
+      const response = await fetch(proxyUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+        next: { revalidate: 3600 }, // Кэш на 1 час
+      });
 
-    // Парсим изображение
-    const imageMatch = html.match(/<img[^>]*src="([^"]*\.png)"[^>]*alt="[^"]*"/);
-    const imageUrl = imageMatch ? imageMatch[1] : undefined;
+      if (!response.ok) return null;
 
-    // Парсим характеристики из таблицы
-    const damage = extractStat(html, /Урон[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
-    const accuracy = extractStat(html, /Точность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
-    const range = extractStat(html, /Дальность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
-    const fireRate = extractStat(html, /Скорострельность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
+      const html = await response.text();
 
-    return {
-      name,
-      description: undefined,
-      damage: damage ? parseInt(damage, 10) : undefined,
-      accuracy: accuracy ? parseInt(accuracy, 10) : undefined,
-      range: range ? parseInt(range, 10) : undefined,
-      fireRate: fireRate ? parseInt(fireRate, 10) : undefined,
-      imageUrl,
-    };
+      // Парсим название из заголовка
+      const titleMatch = html.match(/<h1[^>]*class="firstHeading"[^>]*>([^<]+)<\/h1>/);
+      const name = titleMatch ? titleMatch[1].trim() : weaponId;
+
+      // Парсим изображение
+      const imageMatch = html.match(/<img[^>]*src="([^"]*\.png)"[^>]*alt="[^"]*"/);
+      const imageUrl = imageMatch ? getProxyImageUrl(imageMatch[1]) : undefined;
+
+      // Парсим характеристики из таблицы
+      const damage = extractStat(html, /Урон[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
+      const accuracy = extractStat(html, /Точность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
+      const range = extractStat(html, /Дальность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
+      const fireRate = extractStat(html, /Скорострельность[^<]*<\/td>[\s\n]*<td[^>]*>([^<]+)/);
+
+      return {
+        name,
+        description: undefined,
+        damage: damage ? parseInt(damage, 10) : undefined,
+        accuracy: accuracy ? parseInt(accuracy, 10) : undefined,
+        range: range ? parseInt(range, 10) : undefined,
+        fireRate: fireRate ? parseInt(fireRate, 10) : undefined,
+        imageUrl,
+      };
+    } catch {
+      // Fallback: возвращаем просто название из ID
+      return {
+        name: cleanWeaponName(weaponId),
+        imageUrl: getProxyImageUrl(`https://cdn.wfts.su/weapons/weapons_${weaponId.replace(/_shop$/, "")}.png`),
+      };
+    }
   } catch (error) {
     console.error("[Wiki Parser] Error fetching weapon info:", error);
     return null;
@@ -86,11 +97,11 @@ export async function fetchAchievementInfoFromWiki(achievementId: string): Promi
     // Сначала пробуем из API
     const catalog = await fetchAchievementCatalog();
     const achFromCatalog = catalog.find(a => a.id === achievementId);
-    
+
     if (achFromCatalog) {
       return {
         name: achFromCatalog.name,
-        imageUrl: getAchievementImageUrl(achievementId),
+        imageUrl: getProxyImageUrl(getAchievementImageUrl(achievementId)),
       };
     }
 
@@ -105,7 +116,6 @@ export async function fetchAchievementInfoFromWiki(achievementId: string): Promi
  * Получает URL изображения для достижения
  */
 export function getAchievementImageUrl(achievementId: string): string {
-  const CDN_BASE = "https://cdn.wfts.su/wf_achievements";
   const lower = achievementId.toLowerCase();
 
   // Weapon kill achievements
@@ -115,7 +125,7 @@ export function getAchievementImageUrl(achievementId: string): string {
     return `https://cdn.wfts.su/weapons/weapons_${bare}.png`;
   }
 
-  // Badge
+  // Badge (значок)
   if (lower.includes("_badge")) {
     const base = achievementId.replace(/_badge/i, "").replace(/^_|_$/g, "");
     return `${CDN_BASE}/badge/challenge_badge_${achievementId}.png`;
@@ -146,7 +156,9 @@ export async function fetchMissionInfoFromWiki(missionName: string): Promise<{
   rewards?: string;
 } | null> {
   try {
-    const response = await fetch(`${WIKI_BASE}${encodeURIComponent(missionName)}`, {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}${encodeURIComponent(missionName)}`)}`;
+    
+    const response = await fetch(proxyUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml",
@@ -157,12 +169,12 @@ export async function fetchMissionInfoFromWiki(missionName: string): Promise<{
     if (!response.ok) return null;
 
     const html = await response.text();
-    
+
     const titleMatch = html.match(/<h1[^>]*class="firstHeading"[^>]*>([^<]+)<\/h1>/);
     const name = titleMatch ? titleMatch[1].trim() : missionName;
 
     const imageMatch = html.match(/<img[^>]*src="([^"]*\.(png|jpg))"[^>]*alt="[^"]*"/);
-    const imageUrl = imageMatch ? imageMatch[1] : undefined;
+    const imageUrl = imageMatch ? getProxyImageUrl(imageMatch[1]) : undefined;
 
     return {
       name,
@@ -184,6 +196,11 @@ function extractStat(html: string, pattern: RegExp): string | null {
   return null;
 }
 
+function cleanWeaponName(id: string): string {
+  const bare = id.replace(/_shop$/, "");
+  return bare.replace(/_/g, " ").toUpperCase();
+}
+
 /**
  * Получает список всех значков (badges) из Wiki
  */
@@ -193,7 +210,9 @@ export async function fetchBadgesFromWiki(): Promise<Array<{
   imageUrl: string;
 }>> {
   try {
-    const response = await fetch(`${WIKI_BASE}Значки`, {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}Значки`)}`;
+    
+    const response = await fetch(proxyUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml",
@@ -206,16 +225,30 @@ export async function fetchBadgesFromWiki(): Promise<Array<{
     const html = await response.text();
     const badges: Array<{ id: string; name: string; imageUrl: string }> = [];
 
-    // Парсим таблицу значков
-    const badgePattern = /<tr>[\s\n]*<td[^>]*>[\s\n]*<img[^>]*src="([^"]+)"[^>]*[\s\n]*<td[^>]*>([^<]+)<\/td>/g;
+    // Парсим таблицу значков - ищем все строки таблицы с изображениями
+    const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?<\/tr>/g;
     let match;
-    
-    while ((match = badgePattern.exec(html)) !== null) {
-      badges.push({
-        id: match[2].trim().toLowerCase().replace(/\s+/g, "_"),
-        name: match[2].trim(),
-        imageUrl: match[1],
-      });
+
+    while ((match = rowPattern.exec(html)) !== null) {
+      const rowHtml = match[0];
+      const imgMatch = rowHtml.match(/<img[^>]*src="([^"]+)"/);
+      const nameMatch = rowHtml.match(/<td[^>]*>([^<]+)<\/td>/g);
+      
+      if (imgMatch && nameMatch && nameMatch.length > 0) {
+        const imageUrl = getProxyImageUrl(imgMatch[1]);
+        // Берем второе вхождение - первое обычно номер
+        const nameText = nameMatch.length > 1 
+          ? nameMatch[1].replace(/<[^>]*>/g, "").trim()
+          : nameMatch[0].replace(/<[^>]*>/g, "").trim();
+        
+        if (nameText && !nameText.match(/^\d+$/)) {
+          badges.push({
+            id: nameText.toLowerCase().replace(/\s+/g, "_").replace(/[^\wа-яё0-9]/gi, "_"),
+            name: nameText,
+            imageUrl,
+          });
+        }
+      }
     }
 
     return badges;
@@ -234,7 +267,9 @@ export async function fetchMarksFromWiki(): Promise<Array<{
   imageUrl: string;
 }>> {
   try {
-    const response = await fetch(`${WIKI_BASE}Жетоны`, {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}Жетоны`)}`;
+    
+    const response = await fetch(proxyUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml",
@@ -247,15 +282,28 @@ export async function fetchMarksFromWiki(): Promise<Array<{
     const html = await response.text();
     const marks: Array<{ id: string; name: string; imageUrl: string }> = [];
 
-    const markPattern = /<tr>[\s\n]*<td[^>]*>[\s\n]*<img[^>]*src="([^"]+)"[^>]*[\s\n]*<td[^>]*>([^<]+)<\/td>/g;
+    const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?<\/tr>/g;
     let match;
-    
-    while ((match = markPattern.exec(html)) !== null) {
-      marks.push({
-        id: match[2].trim().toLowerCase().replace(/\s+/g, "_"),
-        name: match[2].trim(),
-        imageUrl: match[1],
-      });
+
+    while ((match = rowPattern.exec(html)) !== null) {
+      const rowHtml = match[0];
+      const imgMatch = rowHtml.match(/<img[^>]*src="([^"]+)"/);
+      const nameMatch = rowHtml.match(/<td[^>]*>([^<]+)<\/td>/g);
+      
+      if (imgMatch && nameMatch && nameMatch.length > 0) {
+        const imageUrl = getProxyImageUrl(imgMatch[1]);
+        const nameText = nameMatch.length > 1 
+          ? nameMatch[1].replace(/<[^>]*>/g, "").trim()
+          : nameMatch[0].replace(/<[^>]*>/g, "").trim();
+        
+        if (nameText && !nameText.match(/^\d+$/)) {
+          marks.push({
+            id: nameText.toLowerCase().replace(/\s+/g, "_").replace(/[^\wа-яё0-9]/gi, "_"),
+            name: nameText,
+            imageUrl,
+          });
+        }
+      }
     }
 
     return marks;
@@ -274,7 +322,9 @@ export async function fetchStripesFromWiki(): Promise<Array<{
   imageUrl: string;
 }>> {
   try {
-    const response = await fetch(`${WIKI_BASE}Нашивки`, {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}Нашивки`)}`;
+    
+    const response = await fetch(proxyUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml",
@@ -287,15 +337,28 @@ export async function fetchStripesFromWiki(): Promise<Array<{
     const html = await response.text();
     const stripes: Array<{ id: string; name: string; imageUrl: string }> = [];
 
-    const stripePattern = /<tr>[\s\n]*<td[^>]*>[\s\n]*<img[^>]*src="([^"]+)"[^>]*[\s\n]*<td[^>]*>([^<]+)<\/td>/g;
+    const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?<\/tr>/g;
     let match;
-    
-    while ((match = stripePattern.exec(html)) !== null) {
-      stripes.push({
-        id: match[2].trim().toLowerCase().replace(/\s+/g, "_"),
-        name: match[2].trim(),
-        imageUrl: match[1],
-      });
+
+    while ((match = rowPattern.exec(html)) !== null) {
+      const rowHtml = match[0];
+      const imgMatch = rowHtml.match(/<img[^>]*src="([^"]+)"/);
+      const nameMatch = rowHtml.match(/<td[^>]*>([^<]+)<\/td>/g);
+      
+      if (imgMatch && nameMatch && nameMatch.length > 0) {
+        const imageUrl = getProxyImageUrl(imgMatch[1]);
+        const nameText = nameMatch.length > 1 
+          ? nameMatch[1].replace(/<[^>]*>/g, "").trim()
+          : nameMatch[0].replace(/<[^>]*>/g, "").trim();
+        
+        if (nameText && !nameText.match(/^\d+$/)) {
+          stripes.push({
+            id: nameText.toLowerCase().replace(/\s+/g, "_").replace(/[^\wа-яё0-9]/gi, "_"),
+            name: nameText,
+            imageUrl,
+          });
+        }
+      }
     }
 
     return stripes;
@@ -312,4 +375,48 @@ export function getProxyImageUrl(url: string): string {
   if (!url) return "";
   if (url.startsWith("data:") || url.startsWith("/")) return url;
   return `/api/proxy/image?url=${encodeURIComponent(url)}`;
+}
+
+/**
+ * Получает все значки, жетоны и нашивки из API и Wiki
+ * Возвращает комбинированный список
+ */
+export async function fetchAllAchievementTypes(): Promise<{
+  badges: Array<{ id: string; name: string; imageUrl: string }>;
+  marks: Array<{ id: string; name: string; imageUrl: string }>;
+  stripes: Array<{ id: string; name: string; imageUrl: string }>;
+}> {
+  // Пробуем получить из API каталог достижений
+  try {
+    const catalog = await fetchAchievementCatalog();
+    
+    // Разделяем по типам
+    const badges: Array<{ id: string; name: string; imageUrl: string }> = [];
+    const marks: Array<{ id: string; name: string; imageUrl: string }> = [];
+    const stripes: Array<{ id: string; name: string; imageUrl: string }> = [];
+
+    for (const ach of catalog) {
+      const lower = ach.id.toLowerCase();
+      const imageUrl = getProxyImageUrl(getAchievementImageUrl(ach.id));
+      
+      if (lower.includes("_badge")) {
+        badges.push({ id: ach.id, name: ach.name, imageUrl });
+      } else if (lower.includes("_mark")) {
+        marks.push({ id: ach.id, name: ach.name, imageUrl });
+      } else if (lower.includes("_stripe") || lower.includes("_strip_")) {
+        stripes.push({ id: ach.id, name: ach.name, imageUrl });
+      }
+    }
+
+    return { badges, marks, stripes };
+  } catch {
+    // Fallback к Wiki парсеру
+    const [badges, marks, stripes] = await Promise.all([
+      fetchBadgesFromWiki(),
+      fetchMarksFromWiki(),
+      fetchStripesFromWiki(),
+    ]);
+    
+    return { badges, marks, stripes };
+  }
 }

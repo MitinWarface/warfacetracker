@@ -11,6 +11,7 @@ const ALLOWED_HOSTS = [
   "wfts.su",
   "wf.cdn.gmru.net",
   "ru.warface.com",
+  "api.warface.ru",
 ];
 
 const CACHE_SECONDS = 86_400; // 24 h — images rarely change
@@ -47,6 +48,8 @@ export async function GET(req: NextRequest) {
       referer = "https://ru.warface.com/wiki/index.php/";
     } else if (upstream.hostname.includes("cdn.wfts.su") || upstream.hostname.includes("wfts.su")) {
       referer = "https://wfts.su/";
+    } else if (upstream.hostname.includes("api.warface.ru")) {
+      referer = "https://api.warface.ru/";
     }
 
     res = await fetch(upstream.toString(), {

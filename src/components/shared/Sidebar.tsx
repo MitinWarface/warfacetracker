@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Menu, X, Search, Trophy, Target, Medal, Users, Sword,
-  TrendingUp, Award, Activity, Users2, Zap, Home, HelpCircle
+  TrendingUp, Award, Activity, Users2, Zap, Home, HelpCircle, Crosshair
 } from "lucide-react";
 
 const NAV: Array<{
@@ -24,22 +24,23 @@ const NAV: Array<{
   {
     href: "/armory",
     label: "Оружейная",
-    icon: Sword
-    // children: [
-    //   { href: "/armory/collection", label: "Коллекция" },
-    // ]
+    icon: Sword,
+    children: [
+      { href: "/armory", label: "Каталог" },
+      { href: "/weapons-leaderboard", label: "Топ оружия" },
+    ]
   },
   {
     href: "/achievements",
     label: "Достижения",
-    icon: Award
-    // children: [
-    //   { href: "/achievements/tracker", label: "Трекер" },
-    // ]
+    icon: Award,
+    children: [
+      { href: "/achievements", label: "Все достижения" },
+    ]
   },
   { href: "/compare",             label: "Сравнение",   icon: Users2 },
+  { href: "/missions",            label: "Миссии",      icon: Zap },
   { href: "/faq",                 label: "FAQ",         icon: HelpCircle },
-  // { href: "/missions",            label: "Миссии",      icon: Zap }, // В разработке
 ];
 
 export default function Sidebar() {
@@ -53,8 +54,8 @@ export default function Sidebar() {
   };
 
   const toggleExpanded = (href: string) => {
-    setExpandedItems(prev => 
-      prev.includes(href) 
+    setExpandedItems(prev =>
+      prev.includes(href)
         ? prev.filter(item => item !== href)
         : [...prev, href]
     );
