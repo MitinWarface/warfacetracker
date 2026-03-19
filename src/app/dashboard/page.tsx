@@ -2,7 +2,7 @@
 // Dashboard с РЕАЛЬНЫМИ данными из API Warface
 
 import { Suspense } from "react";
-import { Search, Trophy, Users, BarChart3, Crosshair, Target } from "lucide-react";
+import { Search, Trophy, Users, BarChart3, Crosshair, Target, Zap } from "lucide-react";
 import Link from "next/link";
 import { fetchTop100, fetchClanRating, fetchWeaponCatalog, fetchMissions } from "@/services/wf-api.service";
 
@@ -102,18 +102,6 @@ export default function DashboardPage() {
             </p>
           </Link>
           <Link
-            href="/pve-guild"
-            className="group p-6 bg-wf-card border border-wf-border rounded-lg hover:border-wf-accent/40 transition-colors"
-          >
-            <Users className="w-8 h-8 mb-4 text-green-400" />
-            <h3 className="text-lg font-bold mb-2 group-hover:text-wf-accent transition-colors">
-              PvE Гильдия
-            </h3>
-            <p className="text-sm text-wf-muted_text">
-              Рейтинг PvE игроков
-            </p>
-          </Link>
-          <Link
             href="/weapons-leaderboard"
             className="group p-6 bg-wf-card border border-wf-border rounded-lg hover:border-wf-accent/40 transition-colors"
           >
@@ -123,6 +111,18 @@ export default function DashboardPage() {
             </h3>
             <p className="text-sm text-wf-muted_text">
               Статистика по оружию
+            </p>
+          </Link>
+          <Link
+            href="/missions"
+            className="group p-6 bg-wf-card border border-wf-border rounded-lg hover:border-wf-accent/40 transition-colors"
+          >
+            <Zap className="w-8 h-8 mb-4 text-blue-400" />
+            <h3 className="text-lg font-bold mb-2 group-hover:text-wf-accent transition-colors">
+              Миссии
+            </h3>
+            <p className="text-sm text-wf-muted_text">
+              Активные миссии PvE
             </p>
           </Link>
         </div>

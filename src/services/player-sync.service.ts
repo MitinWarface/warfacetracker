@@ -12,30 +12,95 @@ export type { NormalizedWeapon };
 const CACHE_TTL = Number(process.env.CACHE_TTL_PLAYER) || 900; // 15 min
 
 export type SyncResult =
-  | { ok: true;  data: NormalizedPlayerStats; source: "cache" | "db" | "api" }
+  | { ok: true;  data: NormalizedPlayerStats; source: "cache" | "db" | "api"; isHidden?: false }
+  | { ok: true;  data: NormalizedPlayerStats; source: "last_saved"; isHidden: true; hiddenAt: Date }
   | { ok: false; error: string };
+
+export type PlayerWithHiddenFlag = NormalizedPlayerStats & {
+  _isHidden?: boolean;
+  _hiddenAt?: Date;
+  _dataSource?: string;
+};
 
 export const syncPlayer = cache(async function syncPlayer(nickname: string): Promise<SyncResult> {
   const key = `player:${nickname.toLowerCase()}`;
 
   // 1. Redis cache - check first for better performance
   const cached = await getCache<NormalizedPlayerStats>(key);
-  if (cached) return { ok: true, data: cached, source: "cache" };
+  if (cached) return { ok: true, data: cached, source: "cache", isHidden: false };
 
   // 2. Fetch from API for fresh data
   const raw = await fetchPlayerStat(nickname);
-  if (!raw) return { ok: false, error: "Player not found or API unavailable" };
+  
+  // Если API вернул данные - используем их
+  if (raw) {
+    const normalized = normalizePlayerStat(raw);
 
-  const normalized = normalizePlayerStat(raw);
+    // Persist to DB (awaited so Next.js doesn't cancel it before completion)
+    try { await upsertPlayer(normalized); }
+    catch (e: unknown) { console.error("[upsertPlayer]", (e as Error)?.message ?? e); }
 
-  // Persist to DB (awaited so Next.js doesn't cancel it before completion)
-  try { await upsertPlayer(normalized); }
-  catch (e: unknown) { console.error("[upsertPlayer]", (e as Error)?.message ?? e); }
+    // 3. Cache the result
+    await setCache(key, normalized, CACHE_TTL);
+    return { ok: true, data: normalized, source: "api", isHidden: false };
+  }
 
-  // 3. Cache the result
-  await setCache(key, normalized, CACHE_TTL);
-  return { ok: true, data: normalized, source: "api" };
+  // 4. API не вернул данные - проверяем есть ли сохраненные данные в БД
+  const lastSaved = await getLastSavedPlayerData(nickname);
+  if (lastSaved) {
+    // Возвращаем последние сохраненные данные с флагом что статистика скрыта
+    return { 
+      ok: true, 
+      data: lastSaved.data, 
+      source: "last_saved" as const, 
+      isHidden: true,
+      hiddenAt: lastSaved.hiddenAt
+    };
+  }
+
+  // Нет данных ни в API ни в БД
+  return { ok: false, error: "Player not found or API unavailable" };
 });
+
+// ─── Get last saved player data from DB ───────────────────────────────────────
+
+export async function getLastSavedPlayerData(nickname: string): Promise<{
+  data: NormalizedPlayerStats;
+  hiddenAt: Date;
+} | null> {
+  try {
+    const player = await prisma.player.findUnique({
+      where: { nickname: nickname.toLowerCase() },
+      include: {
+        snapshots: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+        weapons: {
+          orderBy: { kills: 'desc' },
+        },
+        clan: true,
+      },
+    });
+
+    if (!player || !player.snapshots[0]) {
+      return null;
+    }
+
+    const snapshot = player.snapshots[0];
+    const lastUpdated = player.lastUpdated;
+
+    // Build normalized stats from DB
+    const data = buildFromDBWithTimestamps(player, lastUpdated);
+    
+    return {
+      data,
+      hiddenAt: lastUpdated,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ─── DB upsert ────────────────────────────────────────────────────────────────
 
@@ -329,5 +394,15 @@ function buildFromDB(player: any): NormalizedPlayerStats {
     sessionsKicked:       0,
     sessionsLostConnection: 0,
     onlineTimeSec:        0,
+  };
+}
+
+// Build from DB with custom lastUpdated timestamp
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildFromDBWithTimestamps(player: any, lastUpdated: Date): NormalizedPlayerStats {
+  const base = buildFromDB(player);
+  return {
+    ...base,
+    lastUpdatedAt: lastUpdated,
   };
 }

@@ -52,8 +52,8 @@ export default function Navbar() {
             <Link href="/weapons-leaderboard" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
               Оружие
             </Link>
-            <Link href="/pve-guild" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
-              PvE
+            <Link href="/missions" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
+              Миссии
             </Link>
           </nav>
 
