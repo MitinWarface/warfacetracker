@@ -80,6 +80,16 @@ export async function fetchPlayerStat(nickname: string): Promise<WFPlayerStat | 
 
       const data = await res.json() as Promise<WFPlayerStat>;
       console.log('[WF API] Successfully fetched data with full_response');
+      
+      // Проверяем что full_response действительно есть
+      const statData = await data;
+      if (statData && statData.full_response) {
+        console.log('[WF API] full_response получен, длина:', statData.full_response.length);
+        console.log('[WF API] Первые 200 символов full_response:', statData.full_response.substring(0, 200));
+      } else {
+        console.warn('[WF API] ВНИМАНИЕ: full_response отсутствует или пустой!');
+      }
+      
       return data;
     } else {
       // Клиент — через proxy с full_response
@@ -759,6 +769,12 @@ export function cleanWeaponName(id: string): string {
 export function normalizePlayerStat(raw: WFPlayerStat): NormalizedPlayerStats {
   const kd = raw.death > 0 ? raw.kills / raw.death : raw.kills;
 
+  console.log('[Normalize] Начинаем нормализацию для:', raw.nickname);
+  console.log('[Normalize] full_response есть:', !!raw.full_response);
+  if (raw.full_response) {
+    console.log('[Normalize] Длина full_response:', raw.full_response.length);
+  }
+
   // Extract all additional stats
   const sessionStats = extractSessionStats(raw);
   const killStats = extractKillStats(raw);
@@ -770,6 +786,11 @@ export function normalizePlayerStat(raw: WFPlayerStat): NormalizedPlayerStats {
 
   // Extract class stats first to compute PvP playtime
   const classPvpStats = extractClassStats(raw);
+  console.log('[Normalize] Классов найдено:', classPvpStats.length);
+  if (classPvpStats.length > 0) {
+    console.log('[Normalize] Первый класс:', classPvpStats[0]);
+  }
+  
   const totalPvpMs = classPvpStats.reduce((s, c) => s + c.playtimeMs, 0);
   const pvpPlaytimeH = Math.floor(totalPvpMs / 3_600_000);
   const pvpPlaytimeMin = Math.floor((totalPvpMs % 3_600_000) / 60_000);
@@ -779,6 +800,9 @@ export function normalizePlayerStat(raw: WFPlayerStat): NormalizedPlayerStats {
   const totalPveMs = Math.max(0, totalMs - totalPvpMs);
   const pvePlaytimeH = Math.floor(totalPveMs / 3_600_000);
   const pvePlaytimeMin = Math.floor((totalPveMs % 3_600_000) / 60_000);
+
+  console.log('[Normalize] PvP время:', pvpPlaytimeH, 'ч', pvpPlaytimeMin, 'мин');
+  console.log('[Normalize] PvE время:', pvePlaytimeH, 'ч', pvePlaytimeMin, 'мин');
 
   return {
     userId:        raw.user_id,
