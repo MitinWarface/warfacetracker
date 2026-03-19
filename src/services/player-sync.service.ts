@@ -284,18 +284,25 @@ export async function searchPlayersInDB(query: string): Promise<Array<{
 // ─── DB upsert ────────────────────────────────────────────────────────────────
 
 async function upsertPlayer(data: NormalizedPlayerStats): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  try {
+    console.log('[DB Upsert] Starting upsert for:', data.nickname);
+    
+    // Без транзакции - быстрее и надежнее для Vercel
     let clanDbId: string | undefined;
     if (data.clanId && data.clanName) {
-      const clan = await tx.clan.upsert({
-        where:  { clanId: data.clanId },
-        create: { clanId: data.clanId, name: data.clanName, tag: "" },
-        update: { name: data.clanName, lastUpdated: new Date() },
-      });
-      clanDbId = clan.id;
+      try {
+        const clan = await prisma.clan.upsert({
+          where:  { clanId: data.clanId },
+          create: { clanId: data.clanId, name: data.clanName, tag: "" },
+          update: { name: data.clanName, lastUpdated: new Date() },
+        });
+        clanDbId = clan.id;
+      } catch (e) {
+        console.error('[DB Upsert] Clan upsert error:', (e as Error)?.message ?? e);
+      }
     }
 
-    const player = await tx.player.upsert({
+    const player = await prisma.player.upsert({
       where:  { nickname: data.nickname.toLowerCase() },
       create: {
         nickname:        data.nickname.toLowerCase(),
@@ -320,7 +327,9 @@ async function upsertPlayer(data: NormalizedPlayerStats): Promise<void> {
       },
     });
 
-    await tx.statSnapshot.create({
+    console.log('[DB Upsert] Player upserted:', player.id);
+
+    await prisma.statSnapshot.create({
       data: {
         playerId:      player.id,
         kills:         data.kills,
@@ -345,38 +354,55 @@ async function upsertPlayer(data: NormalizedPlayerStats): Promise<void> {
       },
     });
 
-    for (const w of data.weapons) {
-      const accuracy    = w.shots > 0 ? w.hits / w.shots : 0;
-      const headshotPct = w.hits  > 0 ? w.headshots / w.hits : 0;
-      await tx.weaponStats.upsert({
-        where:  { playerId_weaponId: { playerId: player.id, weaponId: w.weaponId } },
-        create: {
-          playerId:    player.id,
-          weaponId:    w.weaponId,
-          weaponName:  w.weaponName,
-          weaponClass: w.weaponClass,
-          kills:       w.kills,
-          shots:       w.shots,
-          hits:        w.hits,
-          headshots:   w.headshots,
-          headshotPct,
-          accuracy,
-          isGold:      false,
-          goldProgress: 0,
-        },
-        update: {
-          kills:       w.kills,
-          shots:       w.shots,
-          hits:        w.hits,
-          headshots:   w.headshots,
-          headshotPct,
-          accuracy,
-          weaponName:  w.weaponName,
-          weaponClass: w.weaponClass,
-        },
-      });
+    console.log('[DB Upsert] Stat snapshot created');
+
+    // Ограничиваем количество оружий для скорости (топ 50)
+    const topWeapons = data.weapons.slice(0, 50);
+    let weaponsCount = 0;
+    
+    for (const w of topWeapons) {
+      try {
+        const accuracy    = w.shots > 0 ? w.hits / w.shots : 0;
+        const headshotPct = w.hits  > 0 ? w.headshots / w.hits : 0;
+        await prisma.weaponStats.upsert({
+          where:  { playerId_weaponId: { playerId: player.id, weaponId: w.weaponId } },
+          create: {
+            playerId:    player.id,
+            weaponId:    w.weaponId,
+            weaponName:  w.weaponName,
+            weaponClass: w.weaponClass,
+            kills:       w.kills,
+            shots:       w.shots,
+            hits:        w.hits,
+            headshots:   w.headshots,
+            headshotPct,
+            accuracy,
+            isGold:      false,
+            goldProgress: 0,
+          },
+          update: {
+            kills:       w.kills,
+            shots:       w.shots,
+            hits:        w.hits,
+            headshots:   w.headshots,
+            headshotPct,
+            accuracy,
+            weaponName:  w.weaponName,
+            weaponClass: w.weaponClass,
+          },
+        });
+        weaponsCount++;
+      } catch (e) {
+        // Игнорируем ошибки отдельных оружий
+      }
     }
-  });
+    
+    console.log('[DB Upsert] Weapons upserted:', weaponsCount, 'of', topWeapons.length);
+    console.log('[DB Upsert] Completed successfully');
+  } catch (e) {
+    console.error('[DB Upsert] Error:', (e as Error)?.message ?? e);
+    // Не выбрасываем ошибку - чтобы не ломать основной поток
+  }
 }
 
 // ─── K/D history for charts ───────────────────────────────────────────────────
