@@ -25,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" className="dark">
-      <body className={`${inter.variable} font-sans bg-wf-bg text-wf-text antialiased`}>
+    <html lang="ru" className="dark" suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans bg-wf-bg text-wf-text antialiased`} suppressHydrationWarning>
         <Navbar />
         <Sidebar />
         <main className="lg:pl-64">
