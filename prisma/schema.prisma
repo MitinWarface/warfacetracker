@@ -1,0 +1,204 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Vercel Postgres требует SSL
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Player ───────────────────────────────────────────────────────────────────
+
+model Player {
+  id          String   @id @default(cuid())
+  nickname    String   @unique               // lowercase key for lookups
+  displayNickname String @default("") @map("display_nickname") // original case
+  userId      String?  @unique @map("user_id")
+  rankId      Int      @default(1) @map("rank_id")
+  experience  BigInt   @default(0)
+  clanId      String?  @map("clan_id")
+  clan        Clan?    @relation(fields: [clanId], references: [id])
+  favPvP      String   @default("") @map("fav_pvp")   // favourite PvP class
+  favPvE      String   @default("") @map("fav_pve")   // favourite PvE class
+  lastUpdated DateTime @default(now()) @map("last_updated")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  snapshots StatSnapshot[]
+  weapons   WeaponStats[]
+
+  @@index([nickname])
+  @@index([clanId])
+  @@map("players")
+}
+
+// ─── StatSnapshot (time-series) ───────────────────────────────────────────────
+
+model StatSnapshot {
+  id          String   @id @default(cuid())
+  playerId    String   @map("player_id")
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Cumulative totals at snapshot time
+  kills          Int      @default(0)
+  deaths         Int      @default(0)
+  assists        Int      @default(0)
+  friendlyKills  Int      @default(0) @map("friendly_kills")
+  wins           Int      @default(0)
+  losses         Int      @default(0)
+  draws          Int      @default(0)
+  playtime       Int      @default(0)    // minutes
+  accuracy       Float    @default(0.0)  // 0.0–100.0
+  headshotPct    Float    @default(0.0) @map("headshot_pct")
+  kdRatio        Float    @default(0.0) @map("kd_ratio")
+  rankId         Int      @default(1)   @map("rank_id")
+  experience     BigInt   @default(0)
+
+  // PvE
+  pveKills         Int   @default(0) @map("pve_kills")
+  pveDeaths        Int   @default(0) @map("pve_deaths")
+  pveFriendlyKills Int   @default(0) @map("pve_friendly_kills")
+  pveWins          Int   @default(0) @map("pve_wins")
+  pveLosses        Int   @default(0) @map("pve_losses")
+  pveTotal         Int   @default(0) @map("pve_total")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([playerId, createdAt(sort: Desc)])
+  @@map("stat_snapshots")
+}
+
+// ─── WeaponStats ──────────────────────────────────────────────────────────────
+
+model WeaponStats {
+  id           String  @id @default(cuid())
+  playerId     String  @map("player_id")
+  player       Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  weaponId     String  @map("weapon_id")
+  weaponName   String  @map("weapon_name")
+  weaponClass  String  @default("rifle") @map("weapon_class")
+  kills        Int     @default(0)
+  shots        Int     @default(0)
+  hits         Int     @default(0)
+  headshots    Int     @default(0)
+  headshotPct  Float   @default(0.0) @map("headshot_pct")
+  accuracy     Float   @default(0.0)
+  isGold       Boolean @default(false) @map("is_gold")
+  goldProgress Int     @default(0)   @map("gold_progress")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([playerId, weaponId])
+  @@index([playerId, kills(sort: Desc)])
+  @@map("weapon_stats")
+}
+
+// ─── Clan ─────────────────────────────────────────────────────────────────────
+
+model Clan {
+  id          String   @id @default(cuid())
+  clanId      String   @unique @map("clan_id")  // official clan ID
+  name        String
+  tag         String
+  points      Int      @default(0)
+  rankPoints  Int      @default(0) @map("rank_points")
+  memberCount Int      @default(0) @map("member_count")
+  lastUpdated DateTime @default(now()) @map("last_updated")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members Player[]
+
+  @@index([points(sort: Desc)])
+  @@map("clans")
+}
+
+// ─── User Accounts ────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique @map("email")
+  password      String   @map("password")
+  username      String   @unique @map("username")
+  avatarUrl     String?  @map("avatar_url")
+  bannerUrl     String?  @map("banner_url")
+  backgroundPreset String? @default("none") @map("background_preset")
+  bannerPreset  String?  @default("none") @map("banner_preset")
+  bgColor       String   @default("#0f172a") @map("bg_color")
+  accentColor   String   @default("#22c55e") @map("accent_color")
+  bio           String?  @map("bio")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  lastLogin     DateTime? @map("last_login")
+
+  sessions      UserSession[]
+  linkedPlayers LinkedPlayer[]
+  activity      UserActivity[]
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+// ─── User Sessions ────────────────────────────────────────────────────────────
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @map("token")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([token])
+  @@map("user_sessions")
+}
+
+// ─── Linked Players ───────────────────────────────────────────────────────────
+
+model LinkedPlayer {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  warfaceNick String   @unique @map("warface_nick")
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  verifiedAt  DateTime @default(now()) @map("verified_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("linked_players")
+}
+
+// ─── User Activity ────────────────────────────────────────────────────────────
+
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   @map("action") // viewed_profile, linked_nick, etc.
+  details   String?  @map("details")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("user_activity")
+}
+
+// ─── Verification Sessions ────────────────────────────────────────────────────
+
+model VerificationSession {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  warfaceNick   String   @map("warface_nick")
+  badges        String[] @map("badges")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("verification_sessions")
+}
