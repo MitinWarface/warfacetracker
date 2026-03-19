@@ -84,18 +84,376 @@ export async function fetchWFSOnlineStats(): Promise<WFSOnlineStats | null> {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
       },
-      cache: "no-store", // Real-time data
-      next: { revalidate: 60 }, // Revalidate every minute
+      cache: "no-store",
+      next: { revalidate: 60 },
     });
 
-    if (!res.ok) {
-      return null;
-    }
+    if (!res.ok) return null;
 
     const data = await res.json();
     return data as WFSOnlineStats;
   } catch (error) {
     console.error("[WFS API] Error fetching online stats:", error);
+    return null;
+  }
+}
+
+// ─── PvE Stats ────────────────────────────────────────────────────────────────
+
+export interface WFSPvEStats {
+  playerId: string;
+  nickname: string;
+  missionsCompleted: number;
+  crownsEarned: number;
+  totalKills: number;
+  totalDeaths: number;
+  kdRatio: number;
+  totalWins: number;
+  totalLosses: number;
+  winRate: number;
+  favoriteClass: string;
+  favoriteWeapon: string;
+  specialOperationsCompleted: number;
+  survivalMissionsCompleted: number;
+}
+
+/**
+ * Get player PvE stats (missions, crowns, operations)
+ */
+export async function fetchWFSPvEStats(nickname: string): Promise<WFSPvEStats | null> {
+  try {
+    const url = `${WFS_BASE_URL}/player/${encodeURIComponent(nickname)}/pve`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSPvEStats;
+  } catch (error) {
+    console.error("[WFS API] Error fetching PvE stats:", error);
+    return null;
+  }
+}
+
+// ─── PvE Achievements ─────────────────────────────────────────────────────────
+
+export interface WFSPvEAchievement {
+  id: string;
+  name: string;
+  description: string;
+  completed: boolean;
+  completedDate?: string;
+  progress: number;
+  maxProgress: number;
+  icon?: string;
+}
+
+export interface WFSPvEAchievements {
+  playerId: string;
+  nickname: string;
+  totalAchievements: number;
+  completedAchievements: number;
+  completionRate: number;
+  achievements: WFSPvEAchievement[];
+}
+
+/**
+ * Get player PvE achievements (special operations)
+ */
+export async function fetchWFSPvEAchievements(nickname: string): Promise<WFSPvEAchievements | null> {
+  try {
+    const url = `${WFS_BASE_URL}/player/${encodeURIComponent(nickname)}/pveAchievements`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSPvEAchievements;
+  } catch (error) {
+    console.error("[WFS API] Error fetching PvE achievements:", error);
+    return null;
+  }
+}
+
+// ─── Player Search ────────────────────────────────────────────────────────────
+
+export interface WFSSearchedPlayer {
+  playerId: string;
+  nickname: string;
+  isHidden: boolean;
+  lastSeen?: string;
+}
+
+/**
+ * Search for players by nickname
+ */
+export async function searchWFSPlayers(query: string): Promise<WFSSearchedPlayer[] | null> {
+  try {
+    const url = `${WFS_BASE_URL}/player/search?query=${encodeURIComponent(query)}`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "no-store",
+      next: { revalidate: 60 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSSearchedPlayer[];
+  } catch (error) {
+    console.error("[WFS API] Error searching players:", error);
+    return null;
+  }
+}
+
+// ─── Ratings ──────────────────────────────────────────────────────────────────
+
+export interface WFSRatingEntry {
+  rank: number;
+  rankChange: number;
+  playerId: string;
+  nickname: string;
+  value: number;
+  isHidden: boolean;
+}
+
+export interface WFSRatings {
+  category: string;
+  total: number;
+  lastUpdated: string;
+  entries: WFSRatingEntry[];
+}
+
+/**
+ * Get player ratings (PvP, PvE, K/D, Wins)
+ */
+export async function fetchWFSRatings(
+  category: 'pvp' | 'pve' | 'kd' | 'wins' | 'rating',
+  limit: number = 100
+): Promise<WFSRatings | null> {
+  try {
+    const url = `${WFS_BASE_URL}/ratings/players?category=${category}&limit=${limit}`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSRatings;
+  } catch (error) {
+    console.error("[WFS API] Error fetching ratings:", error);
+    return null;
+  }
+}
+
+// ─── Clan Ratings ─────────────────────────────────────────────────────────────
+
+export interface WFSClanRatingEntry {
+  rank: number;
+  rankChange: number;
+  clanId: string;
+  clanName: string;
+  clanTag: string;
+  points: number;
+  members: number;
+}
+
+export interface WFSClanRatings {
+  total: number;
+  lastUpdated: string;
+  entries: WFSClanRatingEntry[];
+}
+
+/**
+ * Get clan ratings
+ */
+export async function fetchWFSClanRatings(limit: number = 100): Promise<WFSClanRatings | null> {
+  try {
+    const url = `${WFS_BASE_URL}/ratings/clans?limit=${limit}`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSClanRatings;
+  } catch (error) {
+    console.error("[WFS API] Error fetching clan ratings:", error);
+    return null;
+  }
+}
+
+// ─── Clan Info ────────────────────────────────────────────────────────────────
+
+export interface WFSClanMember {
+  playerId: string;
+  nickname: string;
+  role: string;
+  joinDate: string;
+  isHidden: boolean;
+}
+
+export interface WFSClanInfo {
+  clanId: string;
+  clanName: string;
+  clanTag: string;
+  description?: string;
+  createdDate: string;
+  members: WFSClanMember[];
+  totalMembers: number;
+  rating: number;
+  wins: number;
+  losses: number;
+}
+
+/**
+ * Get clan information
+ */
+export async function fetchWFSClanInfo(clanId: string): Promise<WFSClanInfo | null> {
+  try {
+    const url = `${WFS_BASE_URL}/clan/${encodeURIComponent(clanId)}`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSClanInfo;
+  } catch (error) {
+    console.error("[WFS API] Error fetching clan info:", error);
+    return null;
+  }
+}
+
+// ─── Weapon Stats ─────────────────────────────────────────────────────────────
+
+export interface WFSWeaponStats {
+  weaponId: string;
+  weaponName: string;
+  weaponClass: string;
+  kills: number;
+  headshots: number;
+  headshotRate: number;
+  accuracy: number;
+  shotsFired: number;
+  shotsHit: number;
+  playtimeSeconds: number;
+}
+
+/**
+ * Get player weapon stats
+ */
+export async function fetchWFSWeaponStats(nickname: string): Promise<WFSWeaponStats[] | null> {
+  try {
+    const url = `${WFS_BASE_URL}/player/${encodeURIComponent(nickname)}/weapons`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "force-cache",
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSWeaponStats[];
+  } catch (error) {
+    console.error("[WFS API] Error fetching weapon stats:", error);
+    return null;
+  }
+}
+
+// ─── Player Compare ───────────────────────────────────────────────────────────
+
+export interface WFSComparedPlayer {
+  playerId: string;
+  nickname: string;
+  kills: number;
+  deaths: number;
+  kdRatio: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  rank: string;
+  isHidden: boolean;
+}
+
+export interface WFSPlayerComparison {
+  players: WFSComparedPlayer[];
+  comparison: {
+    kills: { best: string; values: number[] };
+    kdRatio: { best: string; values: number[] };
+    winRate: { best: string; values: number[] };
+  };
+}
+
+/**
+ * Compare multiple players
+ */
+export async function compareWFSPlayers(nicknames: string[]): Promise<WFSPlayerComparison | null> {
+  try {
+    const ids = nicknames.map(n => encodeURIComponent(n)).join(',');
+    const url = `${WFS_BASE_URL}/players/compare?ids=${ids}`;
+    
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+      cache: "no-store",
+      next: { revalidate: 60 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data as WFSPlayerComparison;
+  } catch (error) {
+    console.error("[WFS API] Error comparing players:", error);
     return null;
   }
 }
