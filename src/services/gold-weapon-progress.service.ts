@@ -114,7 +114,7 @@ const GOLD_WEAPON_KILL_REQUIREMENTS: Record<string, number> = {
 
 /**
  * Проверяет есть ли у игрока отметка для оружия
- * Формат achievement_id: "{weaponId}_mark" или "{weaponId}_gold"
+ * Формат achievement_id: "{weaponId}_mark", "{weaponId}_gold", "{weaponId}_mark_name"
  */
 function hasWeaponMark(achievements: string[], weaponId: string): boolean {
   // Проверяем разные форматы достижений для золотого оружия
@@ -123,11 +123,25 @@ function hasWeaponMark(achievements: string[], weaponId: string): boolean {
     `${weaponId}_gold`,
     `${weaponId}_mark_name`,
     `${weaponId}_gold_name`,
+    `${weaponId}mark`,
+    `${weaponId}gold`,
   ];
   
-  return possibleMarkIds.some(id => 
-    achievements.some(ach => ach.toLowerCase().includes(id.toLowerCase()))
+  // Ищем совпадения в достижениях игрока
+  const hasMark = possibleMarkIds.some(markId => 
+    achievements.some(ach => {
+      const achLower = ach.toLowerCase();
+      const markLower = markId.toLowerCase();
+      return achLower.includes(markLower);
+    })
   );
+  
+  // Логирование для отладки
+  if (hasMark) {
+    console.log(`[Gold Weapon] ${weaponId}: отметка найдена!`);
+  }
+  
+  return hasMark;
 }
 
 /**
@@ -137,9 +151,15 @@ export async function getGoldWeaponProgress(
   weapons: NormalizedWeapon[],
   nickname: string
 ): Promise<GoldWeaponProgress[]> {
+  console.log(`[Gold Weapon] Запрос для игрока: ${nickname}`);
+  console.log(`[Gold Weapon] Оружия в арсенале: ${weapons.length}`);
+  
   // Получаем достижения игрока из API
   const achievements = await fetchPlayerAchievements(nickname);
   const achievementIds = achievements.map(a => a.achievement_id);
+  
+  console.log(`[Gold Weapon] Получено достижений: ${achievementIds.length}`);
+  console.log(`[Gold Weapon] Примеры достижений:`, achievementIds.slice(0, 10));
   
   const progress: GoldWeaponProgress[] = [];
 
@@ -153,6 +173,14 @@ export async function getGoldWeaponProgress(
     
     // Золотое считается полученным ТОЛЬКО если есть отметка
     const isCompleted = hasMark && currentKills >= requiredKills;
+
+    if (hasMark || currentKills > 0) {
+      console.log(`[Gold Weapon] ${weapon.weaponId} (${weapon.weaponName}):`);
+      console.log(`  - Убийства: ${currentKills}/${requiredKills}`);
+      console.log(`  - Отметка: ${hasMark ? '✓' : '✗'}`);
+      console.log(`  - Прогресс: ${progressPercent}%`);
+      console.log(`  - Золотое: ${isCompleted ? '✓' : '✗'}`);
+    }
 
     progress.push({
       weaponId: weapon.weaponId,
