@@ -20,7 +20,7 @@ import type {
   WFMonthlyRating,
 } from "@/types/warface";
 
-const BASE_URL = "https://api.warface.ru";
+const BASE_URL = "http://api.warface.ru";
 const TIMEOUT  = 10_000;
 
 // ─── Low-level fetch ──────────────────────────────────────────────────────────
@@ -30,15 +30,20 @@ async function wfFetch<T>(path: string): Promise<T> {
   const timer = setTimeout(() => controller.abort(), TIMEOUT);
 
   try {
+    // Используем http:// с редиректом на https://
     const res = await fetch(`${BASE_URL}${path}`, {
       signal: controller.signal,
-      headers: { 
+      headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json",
       },
       // Next.js 16: используем force-cache для лучшего кэширования
       cache: "force-cache",
-      next: { revalidate: 300 }, // 5 минут кэш
+      next: { 
+        revalidate: 300, // 5 минут кэш
+        // Обработка редиректов
+        allowHeader: ["Location"],
+      },
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

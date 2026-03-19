@@ -12,6 +12,7 @@ const ALLOWED_HOSTS = [
   "wf.cdn.gmru.net",
   "ru.warface.com",
   "api.warface.ru",
+  "warface.com",
 ];
 
 const CACHE_SECONDS = 86_400; // 24 h — images rarely change
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
     } else if (upstream.hostname.includes("cdn.wfts.su") || upstream.hostname.includes("wfts.su")) {
       referer = "https://wfts.su/";
     } else if (upstream.hostname.includes("api.warface.ru")) {
-      referer = "https://api.warface.ru/";
+      referer = "http://api.warface.ru/";
     }
 
     res = await fetch(upstream.toString(), {
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
       },
+      redirect: "follow",
       next: { revalidate: CACHE_SECONDS },
     });
   } catch (error) {
@@ -68,7 +70,7 @@ export async function GET(req: NextRequest) {
 
   if (!res.ok) {
     // Return 404 for missing images (not 502)
-    return NextResponse.json({ error: "Image not found" }, { status: 404 });
+    return NextResponse.json({ error: "Image not found" }, { status: res.status === 404 ? 404 : 502 });
   }
 
   const contentType = res.headers.get("content-type") ?? "image/png";

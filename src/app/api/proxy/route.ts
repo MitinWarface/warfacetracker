@@ -11,6 +11,8 @@ const ALLOWED_TARGETS = [
   "https://ru.warface.com",
   "wf.cdn.gmru.net",
   "https://wf.cdn.gmru.net",
+  "cdn.warface.com",
+  "https://cdn.warface.com",
 ];
 
 const CACHE_SECONDS = 300; // 5 минут для API данных
@@ -48,18 +50,20 @@ export async function GET(req: NextRequest) {
     const headers: Record<string, string> = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept": "application/json, text/html, */*",
+      "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
     };
 
     // Для Wiki добавляем Referer
     if (target.hostname.includes("ru.warface.com") || target.hostname.includes("wf.cdn.gmru.net")) {
       headers["Referer"] = "https://ru.warface.com/wiki/index.php/";
     } else if (target.hostname.includes("api.warface.ru")) {
-      headers["Referer"] = "https://api.warface.ru/";
+      headers["Referer"] = "http://api.warface.ru/";
     }
 
     const res = await fetch(target.toString(), {
       method: "GET",
       headers,
+      redirect: "follow", // Автоматически следовать редиректам
       next: { revalidate: CACHE_SECONDS },
     });
 
