@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProfilePage({ params, searchParams }: Props) {
   const [{ nickname: rawNickname }, sp] = await Promise.all([params, searchParams]);
-  
+
   // Properly decode nickname - handle Cyrillic characters correctly
   let nickname: string;
   try {
@@ -62,39 +62,51 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     // If that fails, use as-is
     nickname = rawNickname;
   }
-  
+
   // Replace + with space (common URL encoding issue)
   nickname = nickname.replace(/\+/g, ' ');
-  
+
+  // Convert to lowercase for database lookup
+  const nicknameLower = nickname.toLowerCase();
+
+  console.log('[Profile] Raw nickname:', rawNickname);
+  console.log('[Profile] Decoded nickname:', nickname);
+  console.log('[Profile] Lowercase nickname:', nicknameLower);
+
   const tab = sp.tab ?? "summary";
 
   // Get user profile settings from database by Warface nickname
-  const userSettings = await getUserProfileSettingsByNickname(nickname);
+  const userSettings = await getUserProfileSettingsByNickname(nicknameLower);
   const backgroundPreset = userSettings?.backgroundPreset;
   const bannerPreset = userSettings?.bannerPreset;
   const bannerUrl = userSettings?.bannerUrl;
 
+  console.log('[Profile] Fetching player data...');
   const [resultPromise, history, sessions] = await Promise.all([
-    syncPlayer(nickname),
-    getPlayerHistory(nickname, 10),
-    tab === "history" ? getPlayerSessions(nickname, 100) : Promise.resolve([]),
+    syncPlayer(nicknameLower),
+    getPlayerHistory(nicknameLower, 10),
+    tab === "history" ? getPlayerSessions(nicknameLower, 100) : Promise.resolve([]),
   ]);
 
   // Если игрок не найден ни в API ни в БД - показываем 404
   let result = resultPromise;
   let isHidden = false;
   let hiddenAt: Date | null = null;
-  
+
+  console.log('[Profile] Initial result:', result.ok ? 'OK' : 'NOT OK');
+
   if (!result.ok) {
+    console.log('[Profile] API returned null, checking DB...');
     // Проверяем есть ли сохраненные данные в БД
     const { getLastSavedPlayerData } = await import('@/services/player-sync.service');
-    const lastSaved = await getLastSavedPlayerData(nickname);
-    
+    const lastSaved = await getLastSavedPlayerData(nicknameLower);
+
     if (lastSaved) {
+      console.log('[Profile] Found in DB:', lastSaved.hiddenAt);
       // Есть сохраненные данные - используем их
-      result = { 
-        ok: true as const, 
-        data: lastSaved.data, 
+      result = {
+        ok: true as const,
+        data: lastSaved.data,
         source: 'last_saved' as const,
         isHidden: true,
         hiddenAt: lastSaved.hiddenAt
@@ -102,6 +114,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
       isHidden = true;
       hiddenAt = lastSaved.hiddenAt;
     } else {
+      console.log('[Profile] Not found in API or DB - showing 404');
       // Нет данных ни в API ни в БД
       notFound();
     }

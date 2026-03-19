@@ -39,7 +39,7 @@ const NAV: Array<{
     ]
   },
   { href: "/compare",             label: "Сравнение",   icon: Users2 },
-  { href: "/missions",            label: "Миссии",      icon: Zap },
+  // { href: "/missions",            label: "Миссии",      icon: Zap }, // Временно отключено
   { href: "/faq",                 label: "FAQ",         icon: HelpCircle },
 ];
 

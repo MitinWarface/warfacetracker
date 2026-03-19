@@ -4,20 +4,41 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Search as SearchIcon, User, LogOut, Settings, ExternalLink } from "lucide-react";
+import { User, LogOut, Settings, Users, Activity } from "lucide-react";
 import AuthModal from "@/components/auth/AuthModal";
+import { fetchWFSOnlineStats } from "@/services/wfs-api.service";
 
 export default function Navbar() {
   const { user, logout, isAuthenticated } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [linkedNick, setLinkedNick] = useState<string | null>(null);
+  const [onlineStats, setOnlineStats] = useState<{ totalOnline: number } | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchLinkedNick();
     }
   }, [isAuthenticated]);
+
+  // Load online stats
+  useEffect(() => {
+    loadOnlineStats();
+    // Refresh every 60 seconds
+    const interval = setInterval(loadOnlineStats, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadOnlineStats() {
+    try {
+      const stats = await fetchWFSOnlineStats();
+      if (stats) {
+        setOnlineStats({ totalOnline: stats.totalOnline });
+      }
+    } catch (error) {
+      console.error("Load online stats error:", error);
+    }
+  }
 
   async function fetchLinkedNick() {
     try {
@@ -41,21 +62,27 @@ export default function Navbar() {
             WF <span className="text-wf-accent">Tracker</span>
           </Link>
 
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/search" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
-              Поиск
-            </Link>
-            <Link href="/ratings" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
-              Рейтинги
-            </Link>
-            <Link href="/weapons-leaderboard" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
-              Оружие
-            </Link>
-            <Link href="/missions" className="text-sm text-wf-muted_text hover:text-wf-text transition-colors">
-              Миссии
-            </Link>
-          </nav>
+          {/* Online Stats */}
+          <div className="hidden md:flex items-center gap-4">
+            {onlineStats && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-wf-card border border-wf-border rounded-lg">
+                <Activity className="w-4 h-4 text-green-400" />
+                <span className="text-xs text-wf-muted_text">Онлайн:</span>
+                <span className="text-sm font-bold text-wf-accent">
+                  {onlineStats.totalOnline.toLocaleString()}
+                </span>
+              </div>
+            )}
+            {isAuthenticated && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-wf-card border border-wf-border rounded-lg">
+                <Users className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-wf-muted_text">Игрок:</span>
+                <span className="text-sm font-medium text-wf-text truncate max-w-[150px]">
+                  {linkedNick || user?.username}
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* User Menu */}
           <div className="flex items-center gap-3">

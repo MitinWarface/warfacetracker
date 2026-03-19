@@ -1,10 +1,11 @@
 // src/services/player-sync.service.ts
-// Orchestrates: Redis → PostgreSQL → Official API
+// Orchestrates: Redis → PostgreSQL → Official API → WFS API (for hidden accounts)
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getCache, setCache } from "@/lib/redis";
 import { fetchPlayerStat, normalizePlayerStat } from "./wf-api.service";
+import { fetchWFSPlayerStats } from "./wfs-api.service"; // ← NEW! For hidden accounts
 import type { NormalizedPlayerStats, NormalizedWeapon } from "@/types/warface";
 
 export type { NormalizedWeapon };
@@ -34,30 +35,119 @@ export const syncPlayer = cache(async function syncPlayer(nickname: string): Pro
     return { ok: true, data: cached, source: "cache", isHidden: false };
   }
 
-  // 2. Fetch from API for fresh data
+  // 2. Fetch from Official Warface API
   const raw = await fetchPlayerStat(nickname);
 
   // Если API вернул данные - используем их
   if (raw) {
-    console.log('[Sync] Successfully fetched from API');
+    console.log('[Sync] Successfully fetched from Official API');
     const normalized = normalizePlayerStat(raw);
 
-    // Persist to DB (awaited so Next.js doesn't cancel it before completion)
+    // Persist to DB
     try { await upsertPlayer(normalized); }
     catch (e: unknown) { console.error("[upsertPlayer]", (e as Error)?.message ?? e); }
 
-    // 3. Cache the result
+    // Cache the result
     await setCache(key, normalized, CACHE_TTL);
     return { ok: true, data: normalized, source: "api", isHidden: false };
   }
 
-  console.log('[Sync] API returned null, checking DB...');
+  console.log('[Sync] Official API returned null (hidden account), checking WFS API...');
 
-  // 4. API не вернул данные - проверяем есть ли сохраненные данные в БД
+  // 3. WFS API - for hidden accounts!
+  const wfsStats = await fetchWFSPlayerStats(nickname);
+  
+  if (wfsStats) {
+    console.log('[Sync] Found in WFS API (hidden account)!');
+    // WFS API вернул данные для скрытого аккаунта!
+    // Преобразуем в наш формат
+    const normalized: NormalizedPlayerStats = {
+      userId: wfsStats.playerId,
+      nickname: wfsStats.nickname || nickname,
+      experience: BigInt(0),
+      rankId: 1,
+      clanId: undefined,
+      clanName: undefined,
+      kills: wfsStats.kills || 0,
+      deaths: wfsStats.deaths || 0,
+      friendlyKills: 0,
+      pvpWins: wfsStats.wins || 0,
+      pvpLosses: wfsStats.losses || 0,
+      pvpDraws: 0,
+      pvpTotal: (wfsStats.wins || 0) + (wfsStats.losses || 0),
+      kdRatio: wfsStats.kdRatio || 0,
+      pveKills: 0,
+      pveDeaths: 0,
+      pveFriendlyKills: 0,
+      pveWins: 0,
+      pveLosses: 0,
+      pveTotal: 0,
+      playtimeH: 0,
+      playtimeMin: 0,
+      pvpPlaytimeH: 0,
+      pvpPlaytimeMin: 0,
+      pvePlaytimeH: 0,
+      pvePlaytimeMin: 0,
+      favPvP: "",
+      favPvE: "",
+      weapons: [],
+      classPvpStats: [],
+      supportStats: { healDone: 0, repairDone: 0, ressurectsMade: 0, ammoRestored: 0 },
+      seasonStats: [],
+      pveGrade: undefined,
+      lastUpdatedAt: new Date(),
+      globalAccuracy: 0,
+      globalHsRate: 0,
+      clanRole: undefined,
+      top100: undefined,
+      sessionMvpCount: 0,
+      maxKillStreak: 0,
+      totalDamage: 0,
+      maxDamage: 0,
+      gainedMoney: 0,
+      maxSessionTime: 0,
+      pvpKdRatio: 0,
+      pveKdRatio: 0,
+      pvpWinLossRatio: 0,
+      totalKills: 0,
+      totalPveKills: 0,
+      killsMelee: 0,
+      killsClaymore: 0,
+      killsDevice: 0,
+      killsAi: 0,
+      friendlyKillsPvp: 0,
+      resurrectedByMedic: 0,
+      resurrectedByCoin: 0,
+      climbCoops: 0,
+      climbAssists: 0,
+      clutchSuccess: { clutch1: 0, clutch2: 0, clutch3: 0, clutch4: 0, clutch5: 0 },
+      sessionsLeft: 0,
+      sessionsKicked: 0,
+      sessionsLostConnection: 0,
+      onlineTimeSec: 0,
+    };
+
+    // Persist to DB
+    try { await upsertPlayer(normalized); }
+    catch (e: unknown) { console.error("[upsertPlayer]", (e as Error)?.message ?? e); }
+
+    // Cache the result
+    await setCache(key, normalized, CACHE_TTL);
+
+    return {
+      ok: true,
+      data: normalized,
+      source: "wfs" as const,
+      isHidden: wfsStats.isHidden || false,
+    };
+  }
+
+  console.log('[Sync] WFS API also returned null, checking DB...');
+
+  // 4. Official API и WFS не вернули - проверяем БД
   const lastSaved = await getLastSavedPlayerData(nickname);
   if (lastSaved) {
-    console.log('[Sync] Found in DB, hidden at:', lastSaved.hiddenAt);
-    // Возвращаем последние сохраненные данные с флагом что статистика скрыта
+    console.log('[Sync] Found in DB (last saved data)');
     return {
       ok: true,
       data: lastSaved.data,
@@ -67,8 +157,8 @@ export const syncPlayer = cache(async function syncPlayer(nickname: string): Pro
     };
   }
 
-  console.log('[Sync] Player not found in API or DB');
-  // Нет данных ни в API ни в БД
+  console.log('[Sync] Player not found anywhere');
+  // Нет данных ни в одном источнике
   return { ok: false, error: "Player not found or API unavailable" };
 });
 
