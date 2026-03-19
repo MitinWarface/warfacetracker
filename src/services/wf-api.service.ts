@@ -52,14 +52,13 @@ async function wfFetch<T>(path: string): Promise<T> {
 
 export async function fetchPlayerStat(nickname: string): Promise<WFPlayerStat | null> {
   try {
-    // Проверяем, где выполняемся (сервер или клиент)
     const isServer = typeof window === 'undefined';
 
     if (isServer) {
-      // Сервер — прямой запрос к API
-      const url = `http://api.warface.ru/user/stat/?name=${encodeURIComponent(nickname)}`;
+      // Сервер — прямой запрос к API с full_response для полной статистики
+      const url = `http://api.warface.ru/user/stat/?name=${encodeURIComponent(nickname)}&full_response=1`;
       console.log('[WF API] Fetching player stat:', url);
-      
+
       const res = await fetch(url, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -70,8 +69,7 @@ export async function fetchPlayerStat(nickname: string): Promise<WFPlayerStat | 
       });
 
       console.log('[WF API] Response status:', res.status);
-      
-      // 404 или 500 означают что игрок не найден или статистика скрыта
+
       if (!res.ok) {
         if (res.status === 404 || res.status === 500) {
           console.log('[WF API] Player not found or stats hidden');
@@ -79,13 +77,13 @@ export async function fetchPlayerStat(nickname: string): Promise<WFPlayerStat | 
         }
         return null;
       }
-      
+
       const data = await res.json() as Promise<WFPlayerStat>;
-      console.log('[WF API] Successfully fetched data');
+      console.log('[WF API] Successfully fetched data with full_response');
       return data;
     } else {
-      // Клиент — через proxy
-      const res = await fetch(`/api/warface?endpoint=/user/stat/&name=${encodeURIComponent(nickname)}`, {
+      // Клиент — через proxy с full_response
+      const res = await fetch(`/api/warface?endpoint=/user/stat/&name=${encodeURIComponent(nickname)}&full_response=1`, {
         headers: {
           "User-Agent": "Mozilla/5.0",
           "Accept": "application/json",
