@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 interface LazyImageProps {
@@ -26,7 +26,7 @@ export default function LazyImage({
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [isInView, setIsInView] = useState(false);
-  const imgRef = useState<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (priority) {
@@ -46,16 +46,16 @@ export default function LazyImage({
       }
     );
 
-    if (imgRef[0]) {
-      observer.observe(imgRef[0]);
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
     }
 
     return () => observer.disconnect();
-  }, [priority, imgRef]);
+  }, [priority]);
 
   return (
     <div
-      ref={(el) => (imgRef[0] = el)}
+      ref={imgRef}
       className={`relative overflow-hidden bg-wf-muted/20 ${className}`}
       style={{ width, height }}
     >

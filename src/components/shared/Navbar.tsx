@@ -58,7 +58,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-wf-border bg-wf-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-wf-border bg-wf-surface/95 backdrop-blur" suppressHydrationWarning>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="text-lg font-extrabold tracking-tight">

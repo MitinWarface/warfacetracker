@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   title:       { default: "WF Tracker", template: "%s — WF Tracker" },
   description: "Advanced Warface statistics tracker — K/D history, weapon analytics, clan rankings.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
