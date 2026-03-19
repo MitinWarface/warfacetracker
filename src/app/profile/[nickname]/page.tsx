@@ -4,6 +4,7 @@ import type { Metadata }    from "next";
 import { notFound }          from "next/navigation";
 import { syncPlayer, getPlayerHistory, getPlayerSessions } from "@/services/player-sync.service";
 import { fetchPlayerAchievements, fetchClanInfo, fetchTop100 } from "@/services/wf-api.service";
+import { fetchWFSPvEStats, fetchWFSPvEAchievements } from "@/services/wfs-api.service"; // ← NEW!
 import { getGoldWeaponProgress, getGoldWeaponStats } from "@/services/gold-weapon-progress.service";
 import { getSeasonalRewards, getSeasonSummary } from "@/services/seasonal-rewards.service";
 import { getUserProfileSettingsByNickname } from "@/services/auth.service";
@@ -32,6 +33,8 @@ import GlobalRankingCard    from "@/components/profile/GlobalRankingCard";
 import StreakTracker        from "@/components/profile/StreakTracker";
 import BestWorstWeapons     from "@/components/profile/BestWorstWeapons";
 import SeasonProgressChart  from "@/components/profile/SeasonProgressChart";
+import PvEStatsCard         from "@/components/profile/PvEStatsCard"; // ← NEW!
+import PvEAchievementsTab   from "@/components/profile/PvEAchievementsTab"; // ← NEW!
 import { getDetailedClassStats } from "@/services/class-stats.service";
 import { getWeaponAccuracyStats, getBestWeapons, getWorstWeapons } from "@/services/weapon-accuracy.service";
 import { compareSeasons } from "@/services/season-comparison.service";
@@ -81,12 +84,15 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const bannerPreset = userSettings?.bannerPreset;
   const bannerUrl = userSettings?.bannerUrl;
 
-  console.log('[Profile] Fetching player data...');
   const [resultPromise, history, sessions] = await Promise.all([
     syncPlayer(nicknameLower),
     getPlayerHistory(nicknameLower, 10),
     tab === "history" ? getPlayerSessions(nicknameLower, 100) : Promise.resolve([]),
   ]);
+
+  console.log('[Profile] Fetching player data...');
+  console.log('[Profile] Sync result:', resultPromise.ok ? 'OK' : 'NOT OK');
+  console.log('[Profile] History entries:', history.length);
 
   // Если игрок не найден ни в API ни в БД - показываем 404
   let result = resultPromise;
@@ -132,6 +138,16 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const achievements = tab === "achievements"
     ? await fetchPlayerAchievements(nickname)
     : [];
+
+  // PvE Stats from WFS API - load only when on PvE tab
+  const pvEStats = tab === "pve"
+    ? await fetchWFSPvEStats(nickname)
+    : null;
+
+  // PvE Achievements from WFS API - load only when on PvE Achievements tab
+  const pvEAchievements = tab === "pve-achievements"
+    ? await fetchWFSPvEAchievements(nickname)
+    : null;
 
   // Gold weapon progress for gold tab
   const goldProgress = tab === "gold"
@@ -307,16 +323,40 @@ export default async function ProfilePage({ params, searchParams }: Props) {
         )}
 
         {tab === "pvp" && <PvPTab player={data} />}
-        {tab === "pve" && <PvETab player={data} />}
+        
+        {tab === "pve" && (
+          <>
+            {pvEStats ? (
+              <PvEStatsCard {...pvEStats} />
+            ) : (
+              <div className="text-center py-12 text-wf-muted_text">
+                <p>PvE статистика недоступна</p>
+              </div>
+            )}
+          </>
+        )}
+        
         {tab === "weapons" && (
           <>
             <WeaponAccuracyTable weapons={weaponAccuracy} />
             <BestWorstWeapons weapons={weaponAccuracy} />
           </>
         )}
+        
         {tab === "achievements" && (
           <AchievementsTab achievements={achievements} />
         )}
+        
+        {tab === "pve-achievements" && (
+          pvEAchievements ? (
+            <PvEAchievementsTab {...pvEAchievements} />
+          ) : (
+            <div className="text-center py-12 text-wf-muted_text">
+              <p>PvE достижения недоступны</p>
+            </div>
+          )
+        )}
+        
         {tab === "history" && (
           <div className="space-y-6">
             <SeasonProgressChart seasons={data.seasonStats} />

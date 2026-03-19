@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Оптимизация для слабого интернета
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
+  
   images: {
     remotePatterns: [
       {
@@ -32,16 +37,22 @@ const nextConfig: NextConfig = {
         hostname: "api.warface.ru",
       },
     ],
-    unoptimized: process.env.NODE_ENV === "development",
+    // Оптимизация изображений
+    formats: ["image/webp", "image/avif"],
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96],
+    minimumCacheTTL: 60,
   },
+  
   allowedDevOrigins: ["26.150.128.167", "localhost:3000"],
+  
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000", "26.150.128.167:3000"],
-      bodySizeLimit: "2mb",
+      bodySizeLimit: "1mb", // Уменьшено для скорости
     },
   },
-  // Отключаем строгую проверку CORS для разработки
+  
   async headers() {
     return [
       {
@@ -54,7 +65,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Vercel Postgres совместимость
+  
+  // Кэширование для production
+  async rewrites() {
+    return [];
+  },
+  
   typescript: {
     ignoreBuildErrors: true,
   },

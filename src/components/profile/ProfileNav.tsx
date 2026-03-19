@@ -15,13 +15,12 @@ const TABS: TabEntry[] = [
   { id: "pvp",          label: "PvP",          icon: Crosshair,       type: "tab"  },
   { id: "pve",          label: "PvE",          icon: Zap,             type: "tab"  },
   { id: "weapons",      label: "Оружие",       icon: Package,         type: "tab"  },
-  { id: "favorites",    label: "Избранное",    icon: Star,            type: "tab"  },
   { id: "achievements", label: "Достижения",   icon: Star,            type: "tab"  },
+  { id: "pve-achievements", label: "PvE Достижения", icon: Award,   type: "tab"  },
   { id: "seasons",      label: "Сезоны",       icon: Trophy,          type: "page", path: "/seasons" },
   { id: "history",      label: "История",      icon: History,         type: "tab"  },
   { id: "gold",         label: "Золото",       icon: Trophy,          type: "tab"  },
   { id: "rewards",      label: "Награды",      icon: Award,           type: "tab"  },
-  { id: "social",       label: "Социальное",   icon: Users,           type: "tab"  },
 ];
 
 function Nav({ nickname, activeTab }: { nickname: string; activeTab: string }) {
