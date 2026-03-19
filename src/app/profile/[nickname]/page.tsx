@@ -52,9 +52,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProfilePage({ params, searchParams }: Props) {
   const [{ nickname: rawNickname }, sp] = await Promise.all([params, searchParams]);
-  // Properly decode nickname - handle Cyrillic characters
-  const nickname = decodeURIComponent(rawNickname).replace(/\+/g, ' ');
-  const tab      = sp.tab ?? "summary";
+  
+  // Properly decode nickname - handle Cyrillic characters correctly
+  let nickname: string;
+  try {
+    // First try normal decoding
+    nickname = decodeURIComponent(rawNickname);
+  } catch {
+    // If that fails, use as-is
+    nickname = rawNickname;
+  }
+  
+  // Replace + with space (common URL encoding issue)
+  nickname = nickname.replace(/\+/g, ' ');
+  
+  const tab = sp.tab ?? "summary";
 
   // Get user profile settings from database by Warface nickname
   const userSettings = await getUserProfileSettingsByNickname(nickname);
@@ -62,18 +74,46 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const bannerPreset = userSettings?.bannerPreset;
   const bannerUrl = userSettings?.bannerUrl;
 
-  const [result, history, sessions] = await Promise.all([
+  const [resultPromise, history, sessions] = await Promise.all([
     syncPlayer(nickname),
     getPlayerHistory(nickname, 10),
     tab === "history" ? getPlayerSessions(nickname, 100) : Promise.resolve([]),
   ]);
 
-  if (!result.ok) notFound();
+  // Если игрок не найден ни в API ни в БД - показываем 404
+  let result = resultPromise;
+  let isHidden = false;
+  let hiddenAt: Date | null = null;
+  
+  if (!result.ok) {
+    // Проверяем есть ли сохраненные данные в БД
+    const { getLastSavedPlayerData } = await import('@/services/player-sync.service');
+    const lastSaved = await getLastSavedPlayerData(nickname);
+    
+    if (lastSaved) {
+      // Есть сохраненные данные - используем их
+      result = { 
+        ok: true as const, 
+        data: lastSaved.data, 
+        source: 'last_saved' as const,
+        isHidden: true,
+        hiddenAt: lastSaved.hiddenAt
+      };
+      isHidden = true;
+      hiddenAt = lastSaved.hiddenAt;
+    } else {
+      // Нет данных ни в API ни в БД
+      notFound();
+    }
+  }
+  
   const { data } = result;
 
   // Проверяем, скрыта ли статистика
-  const isHidden = 'isHidden' in result && result.isHidden;
-  const hiddenAt = isHidden ? result.hiddenAt : null;
+  if ('isHidden' in result && result.isHidden) {
+    isHidden = true;
+    hiddenAt = result.hiddenAt;
+  }
 
   // Fetch achievements only when on that tab (avoid extra API call)
   const achievements = tab === "achievements"

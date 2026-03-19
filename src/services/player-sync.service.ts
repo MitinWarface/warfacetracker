@@ -25,15 +25,21 @@ export type PlayerWithHiddenFlag = NormalizedPlayerStats & {
 export const syncPlayer = cache(async function syncPlayer(nickname: string): Promise<SyncResult> {
   const key = `player:${nickname.toLowerCase()}`;
 
+  console.log('[Sync] Starting sync for:', nickname);
+
   // 1. Redis cache - check first for better performance
   const cached = await getCache<NormalizedPlayerStats>(key);
-  if (cached) return { ok: true, data: cached, source: "cache", isHidden: false };
+  if (cached) {
+    console.log('[Sync] Found in Redis cache');
+    return { ok: true, data: cached, source: "cache", isHidden: false };
+  }
 
   // 2. Fetch from API for fresh data
   const raw = await fetchPlayerStat(nickname);
-  
+
   // Если API вернул данные - используем их
   if (raw) {
+    console.log('[Sync] Successfully fetched from API');
     const normalized = normalizePlayerStat(raw);
 
     // Persist to DB (awaited so Next.js doesn't cancel it before completion)
@@ -45,19 +51,23 @@ export const syncPlayer = cache(async function syncPlayer(nickname: string): Pro
     return { ok: true, data: normalized, source: "api", isHidden: false };
   }
 
+  console.log('[Sync] API returned null, checking DB...');
+
   // 4. API не вернул данные - проверяем есть ли сохраненные данные в БД
   const lastSaved = await getLastSavedPlayerData(nickname);
   if (lastSaved) {
+    console.log('[Sync] Found in DB, hidden at:', lastSaved.hiddenAt);
     // Возвращаем последние сохраненные данные с флагом что статистика скрыта
-    return { 
-      ok: true, 
-      data: lastSaved.data, 
-      source: "last_saved" as const, 
+    return {
+      ok: true,
+      data: lastSaved.data,
+      source: "last_saved" as const,
       isHidden: true,
       hiddenAt: lastSaved.hiddenAt
     };
   }
 
+  console.log('[Sync] Player not found in API or DB');
   // Нет данных ни в API ни в БД
   return { ok: false, error: "Player not found or API unavailable" };
 });
@@ -69,8 +79,12 @@ export async function getLastSavedPlayerData(nickname: string): Promise<{
   hiddenAt: Date;
 } | null> {
   try {
-    const player = await prisma.player.findUnique({
-      where: { nickname: nickname.toLowerCase() },
+    const lowerNickname = nickname.toLowerCase();
+    console.log('[DB] Looking for player:', lowerNickname);
+    
+    // Сначала ищем точное совпадение
+    let player = await prisma.player.findUnique({
+      where: { nickname: lowerNickname },
       include: {
         snapshots: {
           orderBy: { createdAt: 'desc' },
@@ -83,9 +97,42 @@ export async function getLastSavedPlayerData(nickname: string): Promise<{
       },
     });
 
-    if (!player || !player.snapshots[0]) {
+    // Если не нашли, пробуем case-insensitive поиск по displayNickname
+    if (!player) {
+      console.log('[DB] Not found by nickname, trying displayNickname...');
+      const players = await prisma.player.findMany({
+        where: {
+          displayNickname: {
+            equals: nickname,
+            mode: 'insensitive',
+          },
+        },
+        include: {
+          snapshots: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+          weapons: {
+            orderBy: { kills: 'desc' },
+          },
+          clan: true,
+        },
+        take: 1,
+      });
+      player = players[0] || null;
+    }
+
+    if (!player) {
+      console.log('[DB] Player not found in database');
       return null;
     }
+    
+    if (!player.snapshots || player.snapshots.length === 0) {
+      console.log('[DB] Player found but no snapshots');
+      return null;
+    }
+
+    console.log('[DB] Player found with snapshot:', player.displayNickname || player.nickname);
 
     const snapshot = player.snapshots[0];
     const lastUpdated = player.lastUpdated;
@@ -97,8 +144,50 @@ export async function getLastSavedPlayerData(nickname: string): Promise<{
       data,
       hiddenAt: lastUpdated,
     };
-  } catch {
+  } catch (error) {
+    console.error('[DB] Error fetching player data:', error);
     return null;
+  }
+}
+
+// ─── Search players in DB by partial nickname ─────────────────────────────────
+
+export async function searchPlayersInDB(query: string): Promise<Array<{
+  nickname: string;
+  displayNickname: string;
+  lastUpdated: Date;
+  hasSnapshot: boolean;
+}>> {
+  try {
+    const lowerQuery = query.toLowerCase();
+    
+    const players = await prisma.player.findMany({
+      where: {
+        OR: [
+          { nickname: { contains: lowerQuery } },
+          { displayNickname: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        snapshots: {
+          take: 1,
+        },
+      },
+      orderBy: {
+        lastUpdated: 'desc',
+      },
+      take: 10,
+    });
+
+    return players.map(p => ({
+      nickname: p.nickname,
+      displayNickname: p.displayNickname || p.nickname,
+      lastUpdated: p.lastUpdated,
+      hasSnapshot: p.snapshots.length > 0,
+    }));
+  } catch (error) {
+    console.error('[DB] Error searching players:', error);
+    return [];
   }
 }
 

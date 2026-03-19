@@ -5,7 +5,15 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "warface-tracker-secret-key-2024";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Проверка что JWT_SECRET установлен в production
+if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+  console.error('❌ JWT_SECRET is not set! Please set it in environment variables.');
+  console.error('Generate one with: openssl rand -base64 32');
+}
+
+const SAFE_JWT_SECRET = JWT_SECRET || "warface-tracker-secret-key-2024";
 const SESSION_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface RegisterInput {
@@ -349,5 +357,5 @@ export async function getUserByUsername(username: string) {
 }
 
 function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ userId }, SAFE_JWT_SECRET, { expiresIn: "30d" });
 }

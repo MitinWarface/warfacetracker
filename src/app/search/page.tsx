@@ -3,7 +3,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Users, Trophy, Target } from "lucide-react";
+import { Search, Users, Trophy, Target, AlertTriangle, Database } from "lucide-react";
 import Link from "next/link";
 import { fetchTop100 } from "@/services/wf-api.service";
 import type { WFTop100Player } from "@/types/warface";
@@ -22,8 +22,15 @@ function SearchContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [topPlayers, setTopPlayers] = useState<WFTop100Player[]>([]);
+  const [savedPlayers, setSavedPlayers] = useState<Array<{
+    nickname: string;
+    displayNickname: string;
+    lastUpdated: string;
+    hasHiddenStats: boolean;
+  }>>([]);
   const [loading, setLoading] = useState(false);
   const [activeClass, setActiveClass] = useState<string>("");
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     const classFilter = searchParams.get("class") || "";
@@ -34,29 +41,53 @@ function SearchContent() {
   const loadTopPlayers = async (classId: string) => {
     setLoading(true);
     try {
-      // Используем proxy для обхода CORS
       const classParam = classId ? `?class=${classId}` : "";
       const res = await fetch(`/api/warface?endpoint=/rating/top100${classParam}`);
-      
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      
+
       const data = await res.json();
-      
-      // Удаляем дубликаты по nickname
+
       const seen = new Set<string>();
       const unique = data.filter((player: WFTop100Player) => {
         if (seen.has(player.nickname)) return false;
         seen.add(player.nickname);
         return true;
       });
-      
+
       setTopPlayers(unique);
     } catch {
       setTopPlayers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Поиск сохраненных игроков в БД через API
+  const searchSavedPlayers = async (searchQuery: string) => {
+    if (!searchQuery.trim()) {
+      setSavedPlayers([]);
+      setShowSaved(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/search/players?q=${encodeURIComponent(searchQuery)}`);
+      if (!res.ok) {
+        throw new Error('Search failed');
+      }
+      const players = await res.json();
+      setSavedPlayers(players.map((p: any) => ({
+        nickname: p.nickname,
+        displayNickname: p.displayNickname,
+        lastUpdated: p.lastUpdated,
+        hasHiddenStats: true,
+      })));
+      setShowSaved(players.length > 0);
+    } catch (error) {
+      console.error('Search error:', error);
     }
   };
 
@@ -98,7 +129,10 @@ function SearchContent() {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                searchSavedPlayers(e.target.value);
+              }}
               placeholder="Введите ник игрока..."
               className="w-full pl-12 pr-4 py-4 bg-wf-card border border-wf-border rounded-lg text-wf-text placeholder:text-wf-muted_text text-base focus:outline-none focus:border-wf-accent/60 focus:ring-2 focus:ring-wf-accent/20 transition-all"
             />
@@ -109,6 +143,51 @@ function SearchContent() {
               Найти
             </button>
           </form>
+
+          {/* Info about hidden stats */}
+          <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-200/70">
+              Если игрок скрыл статистику в настройках игры, будут показаны последние сохраненные данные.
+            </p>
+          </div>
+
+          {/* Saved Players Results */}
+          {showSaved && savedPlayers.length > 0 && (
+            <div className="mt-4 bg-wf-card border border-wf-border rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-wf-muted_text uppercase mb-3 flex items-center gap-2">
+                <Database className="w-4 h-4" />
+                Сохраненные игроки ({savedPlayers.length})
+              </h3>
+              <div className="space-y-2">
+                {savedPlayers.map((player) => (
+                  <Link
+                    key={player.nickname}
+                    href={`/profile/${encodeURIComponent(player.displayNickname)}`}
+                    className="block p-3 rounded-lg border border-wf-border hover:border-wf-accent/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-wf-text">{player.displayNickname}</p>
+                        <p className="text-xs text-wf-muted_text">
+                          Обновлен: {new Date(player.lastUpdated).toLocaleDateString("ru-RU", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      {player.hasHiddenStats && (
+                        <span className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400">
+                          Статистика скрыта
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Top Players */}

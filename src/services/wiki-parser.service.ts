@@ -420,3 +420,138 @@ export async function fetchAllAchievementTypes(): Promise<{
     return { badges, marks, stripes };
   }
 }
+
+/**
+ * Получает список рангов из Wiki Warface
+ */
+export async function fetchRanksFromWiki(): Promise<Array<{
+  id: number;
+  name: string;
+  tier: string;
+  xpRequired: number;
+  imageUrl: string;
+}>> {
+  try {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}Звания`)}`;
+    
+    const response = await fetch(proxyUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      next: { revalidate: 86400 }, // Кэш на 24 часа
+    });
+
+    if (!response.ok) return [];
+
+    const html = await response.text();
+    const ranks: Array<{ id: number; name: string; tier: string; xpRequired: number; imageUrl: string }> = [];
+
+    // Парсим таблицу рангов - ищем строки с данными
+    const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>(\d+)<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>[\s\S]*?<td[^>]*>([^<]*)<\/td>[\s\S]*?<td[^>]*>([\d,\s]*)<\/td>[\s\S]*?<\/tr>/g;
+    let match;
+
+    while ((match = rowPattern.exec(html)) !== null) {
+      const id = parseInt(match[1], 10);
+      const name = match[2].trim();
+      const tier = match[3].trim() || "unknown";
+      const xpStr = match[4].replace(/\s/g, "").replace(/,/g, "");
+      const xpRequired = parseInt(xpStr, 10) || 0;
+
+      if (name && id > 0) {
+        ranks.push({
+          id,
+          name,
+          tier,
+          xpRequired,
+          imageUrl: getProxyImageUrl(`https://cdn.wfts.su/ranks/ranks_all.png?v=${id}`),
+        });
+      }
+    }
+
+    return ranks;
+  } catch (error) {
+    console.error("[Wiki Parser] Error fetching ranks:", error);
+    return [];
+  }
+}
+
+/**
+ * Получает список спецопераций из Wiki
+ */
+export async function fetchSpecialOperationsFromWiki(): Promise<Array<{
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl: string;
+  difficulty?: string;
+  rewards?: string;
+}>> {
+  try {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`${WIKI_BASE}Спецоперации`)}`;
+    
+    const response = await fetch(proxyUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      next: { revalidate: 3600 }, // Кэш на 1 час
+    });
+
+    if (!response.ok) return [];
+
+    const html = await response.text();
+    const operations: Array<{ id: string; name: string; description?: string; imageUrl: string; difficulty?: string; rewards?: string }> = [];
+
+    // Парсим таблицу спецопераций
+    const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/g;
+    let match;
+
+    while ((match = rowPattern.exec(html)) !== null) {
+      const imageUrl = getProxyImageUrl(match[1]);
+      const name = match[2].trim();
+
+      if (name) {
+        operations.push({
+          id: name.toLowerCase().replace(/\s+/g, "_").replace(/[^\wа-яё0-9]/gi, "_"),
+          name,
+          imageUrl,
+        });
+      }
+    }
+
+    return operations;
+  } catch (error) {
+    console.error("[Wiki Parser] Error fetching special operations:", error);
+    return [];
+  }
+}
+
+/**
+ * Получает детальную информацию о ранге из Wiki
+ */
+export async function fetchRankInfoFromWiki(rankId: number): Promise<{
+  id: number;
+  name: string;
+  tier: string;
+  xpRequired: number;
+  description?: string;
+  imageUrl: string;
+} | null> {
+  try {
+    // Получаем информацию из локального rank.service
+    const { getRankInfo } = await import("./rank.service");
+    const rankInfo = getRankInfo(rankId);
+    
+    return {
+      id: rankInfo.id,
+      name: rankInfo.name,
+      tier: rankInfo.tier,
+      xpRequired: rankInfo.xpMin,
+      imageUrl: getProxyImageUrl(rankInfo.iconPath),
+    };
+  } catch (error) {
+    console.error("[Wiki Parser] Error fetching rank info:", error);
+    return null;
+  }
+}
